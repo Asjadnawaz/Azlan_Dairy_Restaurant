@@ -1,36 +1,108 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Azlan Dairy Restaurant
+
+A full-featured restaurant ordering web application for **Azlan Dairy Restaurant** in Malir, Karachi. Browse the menu, place orders, track deliveries, and manage the restaurant — all from a modern, responsive web interface.
+
+![Next.js](https://img.shields.io/badge/Next.js-16-black)
+![React](https://img.shields.io/badge/React-19-61dafb)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-blue)
+![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL-3ecf8e)
+![Tailwind](https://img.shields.io/badge/Tailwind-4-38bdf8)
+
+## Features
+
+### Customer
+- **Dynamic Menu** — Browse items by category (Signature Dishes, Broast, Burgers, Rolls & Wraps, BBQ, Sides, Beverages)
+- **Smart Cart** — Add/remove items with quantity controls; persists across sessions via localStorage
+- **Checkout with Map** — Select delivery location on an interactive map; delivery fee calculated dynamically based on distance (PKR 60 base for 2km, PKR 25 per additional km)
+- **Order Tracking** — Real-time status updates from pending to completed
+- **User Accounts** — Sign up, log in, and view order history
+- **Responsive Design** — Optimized for mobile, tablet, and desktop
+
+### Admin
+- **Dashboard** — View and manage all orders
+- **Order Status Updates** — Update orders through the fulfillment pipeline
+- **Store Toggle** — Open/close the store for ordering
+- **Protected Routes** — Admin-only access with authentication
+
+## Tech Stack
+
+| Category | Technology |
+|----------|-----------|
+| Framework | Next.js 16 (App Router) |
+| Language | TypeScript 5 |
+| Styling | Tailwind CSS 4 |
+| State | Zustand 5 |
+| Database & Auth | Supabase (PostgreSQL + RLS) |
+| Maps | Leaflet + react-leaflet |
+| Icons | Lucide React |
+| Notifications | Sonner |
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
+
+- Node.js (v18+)
+- A Supabase project
+- Environment variables configured (see below)
+
+### Setup
 
 ```bash
+# Install dependencies
+npm install
+
+# Create .env.local in the project root
+# Add your Supabase credentials:
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+
+# Run development server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open http://localhost:3000 in your browser.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Other Commands
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm run build    # Production build
+npm run lint     # Run ESLint
+```
 
-## Learn More
+## Project Structure
 
-To learn more about Next.js, take a look at the following resources:
+```
+src/
+├── app/
+│   ├── admin/               # Admin dashboard
+│   ├── api/                 # API routes
+│   ├── auth/                # Authentication pages
+│   ├── cart/                # Cart page
+│   ├── checkout/            # Checkout & delivery
+│   ├── menu/                # Menu browsing
+│   ├── orders/              # Order tracking
+│   └── page.tsx             # Homepage
+├── components/
+│   ├── admin/               # Admin components
+│   └── azlan/               # Shared UI components
+├── lib/
+│   ├── supabase/            # Database clients
+│   ├── cart-store.ts        # Cart state (Zustand)
+│   └── delivery.ts          # Delivery calculations
+└── hooks/                   # Custom React hooks
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Database Schema
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Key tables: `items` (menu), `orders`, `order_items`, `settings` (store config), `reviews`.
 
-## Deploy on Vercel
+## Environment Variables
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+| Variable | Description |
+|----------|-------------|
+| `NEXT_PUBLIC_SUPABASE_URL` | Your Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anonymous (public) key |
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Design
+
+Built with a "Farm-to-Table Premium" design system using deep greens, royal purples, and soft mint tones. Typography via Plus Jakarta Sans.
