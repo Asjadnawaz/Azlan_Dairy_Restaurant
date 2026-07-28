@@ -1,0 +1,516 @@
+@import "tailwindcss";
+
+@theme inline {
+  /* Font */
+  --font-jakarta: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+
+  /* Brand tokens (Azlan Dairy Farm-to-Table Premium) */
+  --color-primary: #00230c; /* Deep Green */
+  --color-on-primary: #ffffff;
+  --color-secondary-brand: #754c98; /* Royal Purple */
+  --color-mint-accent: #a3d2a9; /* Mint Accent */
+  --color-cta-yellow: #FED835; /* Sunny Yellow for CTAs */
+  --color-tertiary: #001e3d; /* Vivid Blue */
+  --color-background: #f4f9f6; /* Soft Mint background */
+  --color-on-surface: #1a1c19;
+  --color-on-surface-variant: #414941;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-low: #f3f4ef;
+  --color-surface-container: #edeee9;
+  --color-surface-container-high: #e8e9e4;
+  --color-surface-container-highest: #e2e3de;
+  --color-surface-variant: #e2e3de;
+  --color-outline-variant: #c1c9bf;
+  --color-error: #ba1a1a;
+  --color-on-error: #ffffff;
+  --color-success: #25d366;
+  --color-primary-container: #0e3a1d;
+  --color-secondary-container: #daacff;
+  --color-tertiary-container: #003361;
+  --color-inverse-surface: #2f312e;
+
+  /* Radius */
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-2xl: 1.5rem;
+  --radius-full: 9999px;
+
+  --radius: 0.625rem;
+}
+
+/* =========================================
+   Base styles
+   ========================================= */
+
+html {
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: var(--font-jakarta);
+  color: var(--color-on-surface);
+  background-color: var(--color-background);
+  min-height: 100vh;
+}
+
+/* =========================================
+   Material Symbols — baseline
+   ========================================= */
+
+.material-symbols-outlined {
+  font-family: "Material Symbols Outlined";
+  font-weight: 400;
+  font-style: normal;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-feature-settings: "liga";
+  font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
+  vertical-align: middle;
+}
+
+.material-symbols-outlined.filled {
+  font-variation-settings: "FILL" 1, "wght" 400, "GRAD" 0, "opsz" 24;
+}
+
+.material-symbols-outlined.material-symbols-rounded {
+  font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
+}
+
+/* =========================================
+   Typography utilities
+   ========================================= */
+
+.tracking-tight-hero {
+  letter-spacing: -0.03em;
+}
+
+/* =========================================
+   Custom shadow helpers
+   ========================================= */
+
+.custom-shadow {
+  box-shadow: 0 4px 20px rgba(0, 35, 12, 0.12);
+}
+
+.custom-shadow-lg {
+  box-shadow: 0 12px 40px rgba(0, 35, 12, 0.16);
+}
+
+/* =========================================
+   Glass panel
+   ========================================= */
+
+.glass-panel {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+/* =========================================
+   Scrollbar helpers
+   ========================================= */
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.slim-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 35, 12, 0.2) transparent;
+}
+.slim-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.slim-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(0, 35, 12, 0.2);
+  border-radius: 3px;
+}
+.slim-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* =========================================
+   Hero section
+   ========================================= */
+
+.hero-section {
+  position: relative;
+  overflow: hidden;
+  min-height: 92vh;
+}
+
+.hero-bg-image {
+  position: absolute;
+  inset: 0;
+  background: url("/images/hero.jpg") center/cover no-repeat;
+  opacity: 0.45;
+  animation: heroZoom 18s ease-in-out infinite alternate;
+}
+
+.hero-glow {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(100px);
+  pointer-events: none;
+}
+
+.hero-glow-1 {
+  width: 400px;
+  height: 400px;
+  top: -80px;
+  left: -60px;
+  background: var(--color-mint-accent);
+  opacity: 0.3;
+  animation: floatGlow 9s ease-in-out infinite;
+}
+
+.hero-glow-2 {
+  width: 350px;
+  height: 350px;
+  bottom: -50px;
+  right: -40px;
+  background: #754c98;
+  opacity: 0.25;
+  animation: floatGlow 11s ease-in-out infinite reverse;
+}
+
+.hero-particle {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  animation: drift linear infinite;
+}
+
+/* =========================================
+   Shimmer text (gradient clip)
+   ========================================= */
+
+.shimmer-text {
+  background: linear-gradient(
+    90deg,
+    var(--color-mint-accent) 0%,
+    #ffffff 50%,
+    var(--color-mint-accent) 100%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shimmer 3s ease-in-out infinite;
+}
+
+.gradient-text-green {
+  background: linear-gradient(135deg, var(--color-mint-accent), #78a57f);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.gradient-text-purple {
+  background: linear-gradient(135deg, var(--color-secondary-brand), #9b6cbf);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* =========================================
+   Reveal on scroll
+   ========================================= */
+
+.reveal {
+  opacity: 0;
+}
+
+.reveal.in-view {
+  animation: fadeUp 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* =========================================
+   Lift on hover
+   ========================================= */
+
+.lift-on-hover {
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.lift-on-hover:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 12px 40px rgba(0, 35, 12, 0.16);
+}
+
+/* =========================================
+   Focus ring
+   ========================================= */
+
+.focus-ring:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* =========================================
+   Decorative backgrounds
+   ========================================= */
+
+.bg-dots {
+  background-image: radial-gradient(
+    circle,
+    rgba(0, 35, 12, 0.08) 1px,
+    transparent 1px
+  );
+  background-size: 20px 20px;
+}
+
+.bg-grid {
+  background-image: linear-gradient(
+      rgba(0, 35, 12, 0.05) 1px,
+      transparent 1px
+    ),
+    linear-gradient(90deg, rgba(0, 35, 12, 0.05) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* =========================================
+   Keyframes
+   ========================================= */
+
+@keyframes heroZoom {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(1.08);
+  }
+}
+
+@keyframes floatGlow {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  25% {
+    transform: translate(20px, -30px);
+  }
+  50% {
+    transform: translate(-10px, -15px);
+  }
+  75% {
+    transform: translate(-25px, 20px);
+  }
+}
+
+@keyframes drift {
+  0% {
+    transform: translateY(0) translateX(0);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-100vh) translateX(30px);
+    opacity: 0;
+  }
+}
+
+@keyframes bounceY {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+@keyframes marquee {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes softPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(37, 211, 102, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(37, 211, 102, 0);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+@keyframes modalIn {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes skelShimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+@keyframes floatY {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-12px);
+  }
+}
+
+@keyframes spinSlow {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes glowPulse {
+  0%,
+  100% {
+    opacity: 0.2;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* =========================================
+   Animation utility classes
+   ========================================= */
+
+.animate-bounce-y {
+  animation: bounceY 2s ease-in-out infinite;
+}
+
+.animate-marquee {
+  animation: marquee 22s linear infinite;
+}
+
+.animate-soft-pulse {
+  animation: softPulse 2s ease-in-out infinite;
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.4s ease-out forwards;
+}
+
+.animate-scale-in {
+  animation: scaleIn 0.3s ease-out forwards;
+}
+
+.animate-slide-up {
+  animation: slideUp 0.4s ease-out forwards;
+}
+
+.animate-float {
+  animation: floatY 3s ease-in-out infinite;
+}
+
+.animate-spin-slow {
+  animation: spinSlow 8s linear infinite;
+}
+
+.animate-glow {
+  animation: glowPulse 3s ease-in-out infinite;
+}
+
+/* =========================================
+   Skeleton loader
+   ========================================= */
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--color-surface-container) 25%,
+    var(--color-surface-container-high) 50%,
+    var(--color-surface-container) 75%
+  );
+  background-size: 200% 100%;
+  animation: skelShimmer 1.5s ease-in-out infinite;
+  border-radius: var(--radius-md);
+}

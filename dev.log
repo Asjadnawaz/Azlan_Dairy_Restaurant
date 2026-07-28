@@ -1,0 +1,198 @@
+
+> azlan_dairy_next_app@0.1.0 dev
+> next dev
+
+▲ Next.js 16.2.12 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://192.168.56.1:3000
+- Environments: .env.local
+✓ Ready in 1529ms
+
+ GET / 200 in 2.8s (next.js: 1353ms, application-code: 1469ms)
+ GET /admin/login 200 in 625ms (next.js: 68ms, proxy.ts: 13ms, application-code: 544ms)
+Order insert error: {
+  code: '42501',
+  details: null,
+  hint: null,
+  message: 'new row violates row-level security policy for table "orders"'
+}
+ POST /api/orders 500 in 1489ms (next.js: 926ms, application-code: 563ms)
+Persisting failed: Unable to write SST file 00000067.sst
+
+Caused by:
+    The system cannot find the path specified. (os error 3)
+Compaction failed: Another write batch or compaction is already active (Only a single write operations is allowed at a time)
+Persisting failed: Another write batch or compaction is already active (Only a single write operations is allowed at a time)
+Persisting failed: Another write batch or compaction is already active (Only a single write operations is allowed at a time)
+Compaction failed: Another write batch or compaction is already active (Only a single write operations is allowed at a time)
+Persisting failed: Another write batch or compaction is already active (Only a single write operations is allowed at a time)
+Compaction failed: Another write batch or compaction is already active (Only a single write operations is allowed at a time)
+Persisting failed: Another write batch or compaction is already active (Only a single write operations is allowed at a time)
+Persisting failed: Another write batch or compaction is already active (Only a single write operations is allowed at a time)
+Compaction failed: Another write batch or compaction is already active (Only a single write operations is allowed at a time)
+Persisting failed: Another write batch or compaction is already active (Only a single write operations is allowed at a time)
+Persisting failed: Another write batch or compaction is already active (Only a single write operations is allowed at a time)
+Compaction failed: Another write batch or compaction is already active (Only a single write operations is allowed at a time)
+Persisting failed: Another write batch or compaction is already active (Only a single write operations is allowed at a time)
+Compaction failed: Another write batch or compaction is already active (Only a single write operations is allowed at a time)
+Persisting failed: Another write batch or compaction is already active (Only a single write operations is allowed at a time)
+Persisting failed: Another write batch or compaction is already active (Only a single write operations is allowed at a time)
+Compaction failed: Another write batch or compaction is already active (Only a single write operations is allowed at a time)
+Persisting failed: Another write batch or compaction is already active (Only a single write operations is allowed at a time)
+Persisting failed: Another write batch or compaction is already active (Only a single write operations is allowed at a time)
+Persisting failed: Another write batch or compaction is already active (Only a single write operations is allowed at a time)
+Compaction failed: Another write batch or compaction is already active (Only a single write operations is allowed at a time)
+Persisting failed: Another write batch or compaction is already active (Only a single write operations is allowed at a time)
+Persisting failed: Another write batch or compaction is already active (Only a single write operations is allowed at a time)
+Compaction failed: Another write batch or compaction is already active (Only a single write operations is allowed at a time)
+Persisting failed: Another write batch or compaction is already active (Only a single write operations is allowed at a time)
+Compaction failed: Another write batch or compaction is already active (Only a single write operations is allowed at a time)
+⨯ Error: ENOENT: no such file or directory, open 'E:\Azlan_Dairy\AzlanDairy_RealWebsite\azlan_dairy_next_app\.next\dev\server\app\page\build-manifest.json'
+    at ignore-listed frames {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'E:\\Azlan_Dairy\\AzlanDairy_RealWebsite\\azlan_dairy_next_app\\.next\\dev\\server\\app\\page\\build-manifest.json'
+}
+
+thread 'tokio-runtime-worker' (6668) panicked at turbopack\crates\turbo-tasks-backend\src\backend\operation\mod.rs:197:17:
+Failed to restore task data (corrupted database or bug): Meta for TaskId 517)
+
+Caused by:
+    0: Looking up task storage for TaskId 517 from database failed
+    1: Unable to open static sorted file referenced from 00000006.meta
+    2: Unable to open static sorted file 00000002.sst
+    3: Failed to open SST file E:\Azlan_Dairy\AzlanDairy_RealWebsite\azlan_dairy_next_app\.next\dev\cache/turbopack\v16.2.12\00000002.sst
+    4: The system cannot find the path specified. (os error 3)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+thread 'tokio-runtime-worker' (7780) panicked at turbopack\crates\turbo-tasks-backend\src\backend\operation\mod.rs:197:17:
+Failed to restore task data (corrupted database or bug): Meta for TaskId 517)
+
+Caused by:
+    0: Looking up task storage for TaskId 517 from database failed
+    1: Unable to open static sorted file referenced from 00000006.meta
+    2: Unable to open static sorted file 00000002.sst
+    3: Failed to open SST file E:\Azlan_Dairy\AzlanDairy_RealWebsite\azlan_dairy_next_app\.next\dev\cache/turbopack\v16.2.12\00000002.sst
+    4: The system cannot find the path specified. (os error 3)
+
+-----
+[1m[31mFATAL[39m[0m: An unexpected Turbopack error occurred. A panic log has been written to C:\Users\Dell\AppData\Local\Temp\next-panic-c1d629d072d4009e6b89d289f52fa773.log.
+
+To help make Turbopack better, report this error by clicking here: https://bugs.nextjs.org/search?category=turbopack-error-report&title=Turbopack%20Error%3A%20Failed%20to%20restore%20task%20data%20%28corrupted%20database%20or%20bug%29%3A%20Meta%20for%20TaskId%20517%29&body=Turbopack%20version%3A%20%60v16.2.12%60%0ANext.js%20version%3A%20%600.0.0%60%0A%0AError%20message%3A%0A%60%60%60%0AFailed%20to%20restore%20task%20data%20%28corrupted%20database%20or%20bug%29%3A%20Meta%20for%20TaskId%20517%29%0A%0ADebug%20info%3A%0A-%20Execution%20of%20get_written_endpoint_with_issues_operation%20failed%0A-%20Failed%20to%20restore%20task%20data%20%28corrupted%20database%20or%20bug%29%3A%20Meta%20for%20TaskId%20517%29%0A%20%20%0A%20%20Caused%20by%3A%0A%20%20%20%20%20%200%3A%20Looking%20up%20task%20storage%20for%20TaskId%20517%20from%20database%20failed%0A%20%20%20%20%20%201%3A%20Unable%20to%20open%20static%20sorted%20file%20referenced%20from%2000000006.meta%0A%20%20%20%20%20%202%3A%20Unable%20to%20open%20static%20sorted%20file%2000000002.sst%0A%20%20%20%20%20%203%3A%20Failed%20to%20open%20SST%20file%20E%3A%5CAzlan_Dairy%5CAzlanDairy_RealWebsite%5Cazlan_dairy_next_app%5C.next%5Cdev%5Ccache%2Fturbopack%5Cv16.2.12%5C00000002.sst%0A%20%20%20%20%20%204%3A%20The%20system%20cannot%20find%20the%20path%20specified.%20%28os%20error%203%29%0A%60%60%60&labels=Turbopack,Turbopack%20Panic%20Backtrace
+-----
+
+⨯ Error [TurbopackInternalError]: Failed to restore task data (corrupted database or bug): Meta for TaskId 517)
+
+Debug info:
+- Execution of get_written_endpoint_with_issues_operation failed
+- Failed to restore task data (corrupted database or bug): Meta for TaskId 517)
+  
+  Caused by:
+      0: Looking up task storage for TaskId 517 from database failed
+      1: Unable to open static sorted file referenced from 00000006.meta
+      2: Unable to open static sorted file 00000002.sst
+      3: Failed to open SST file E:\Azlan_Dairy\AzlanDairy_RealWebsite\azlan_dairy_next_app\.next\dev\cache/turbopack\v16.2.12\00000002.sst
+      4: The system cannot find the path specified. (os error 3)
+    at <unknown> (TurbopackInternalError: Failed to restore task data (corrupted database or bug): Meta for TaskId 517)) {
+  location: 'turbopack\\crates\\turbo-tasks-backend\\src\\backend\\operation\\mod.rs:197:17'
+}
+Error: ENOENT: no such file or directory, open 'E:\Azlan_Dairy\AzlanDairy_RealWebsite\azlan_dairy_next_app\.next\dev\server\app\page\build-manifest.json'
+    at ignore-listed frames {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'E:\\Azlan_Dairy\\AzlanDairy_RealWebsite\\azlan_dairy_next_app\\.next\\dev\\server\\app\\page\\build-manifest.json'
+}
+⨯ Error [TurbopackInternalError]: Failed to restore task data (corrupted database or bug): Meta for TaskId 517)
+
+Debug info:
+- Execution of get_written_endpoint_with_issues_operation failed
+- Failed to restore task data (corrupted database or bug): Meta for TaskId 517)
+  
+  Caused by:
+      0: Looking up task storage for TaskId 517 from database failed
+      1: Unable to open static sorted file referenced from 00000006.meta
+      2: Unable to open static sorted file 00000002.sst
+      3: Failed to open SST file E:\Azlan_Dairy\AzlanDairy_RealWebsite\azlan_dairy_next_app\.next\dev\cache/turbopack\v16.2.12\00000002.sst
+      4: The system cannot find the path specified. (os error 3)
+    at <unknown> (TurbopackInternalError: Failed to restore task data (corrupted database or bug): Meta for TaskId 517)) {
+  location: 'turbopack\\crates\\turbo-tasks-backend\\src\\backend\\operation\\mod.rs:197:17'
+}
+Error [TurbopackInternalError]: Failed to restore task data (corrupted database or bug): Meta for TaskId 517)
+
+Debug info:
+- Execution of get_written_endpoint_with_issues_operation failed
+- Failed to restore task data (corrupted database or bug): Meta for TaskId 517)
+  
+  Caused by:
+      0: Looking up task storage for TaskId 517 from database failed
+      1: Unable to open static sorted file referenced from 00000006.meta
+      2: Unable to open static sorted file 00000002.sst
+      3: Failed to open SST file E:\Azlan_Dairy\AzlanDairy_RealWebsite\azlan_dairy_next_app\.next\dev\cache/turbopack\v16.2.12\00000002.sst
+      4: The system cannot find the path specified. (os error 3)
+    at <unknown> (TurbopackInternalError: Failed to restore task data (corrupted database or bug): Meta for TaskId 517)) {
+  location: 'turbopack\\crates\\turbo-tasks-backend\\src\\backend\\operation\\mod.rs:197:17'
+}
+⨯ Error: ENOENT: no such file or directory, open 'E:\Azlan_Dairy\AzlanDairy_RealWebsite\azlan_dairy_next_app\.next\dev\server\app\api\orders\[__metadata_id__]\route\app-paths-manifest.json'
+    at ignore-listed frames {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'E:\\Azlan_Dairy\\AzlanDairy_RealWebsite\\azlan_dairy_next_app\\.next\\dev\\server\\app\\api\\orders\\[__metadata_id__]\\route\\app-paths-manifest.json'
+}
+⨯ Error [TurbopackInternalError]: Failed to restore task data (corrupted database or bug): Meta for TaskId 517)
+
+Debug info:
+- Execution of get_written_endpoint_with_issues_operation failed
+- Failed to restore task data (corrupted database or bug): Meta for TaskId 517)
+  
+  Caused by:
+      0: Looking up task storage for TaskId 517 from database failed
+      1: Unable to open static sorted file referenced from 00000006.meta
+      2: Unable to open static sorted file 00000002.sst
+      3: Failed to open SST file E:\Azlan_Dairy\AzlanDairy_RealWebsite\azlan_dairy_next_app\.next\dev\cache/turbopack\v16.2.12\00000002.sst
+      4: The system cannot find the path specified. (os error 3)
+    at <unknown> (TurbopackInternalError: Failed to restore task data (corrupted database or bug): Meta for TaskId 517)) {
+  location: 'turbopack\\crates\\turbo-tasks-backend\\src\\backend\\operation\\mod.rs:197:17'
+}
+Error: ENOENT: no such file or directory, open 'E:\Azlan_Dairy\AzlanDairy_RealWebsite\azlan_dairy_next_app\.next\dev\server\app\api\orders\[__metadata_id__]\route\app-paths-manifest.json'
+    at ignore-listed frames {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'E:\\Azlan_Dairy\\AzlanDairy_RealWebsite\\azlan_dairy_next_app\\.next\\dev\\server\\app\\api\\orders\\[__metadata_id__]\\route\\app-paths-manifest.json'
+}
+⨯ Error [TurbopackInternalError]: Failed to restore task data (corrupted database or bug): Meta for TaskId 517)
+
+Debug info:
+- Execution of get_written_endpoint_with_issues_operation failed
+- Failed to restore task data (corrupted database or bug): Meta for TaskId 517)
+  
+  Caused by:
+      0: Looking up task storage for TaskId 517 from database failed
+      1: Unable to open static sorted file referenced from 00000006.meta
+      2: Unable to open static sorted file 00000002.sst
+      3: Failed to open SST file E:\Azlan_Dairy\AzlanDairy_RealWebsite\azlan_dairy_next_app\.next\dev\cache/turbopack\v16.2.12\00000002.sst
+      4: The system cannot find the path specified. (os error 3)
+    at <unknown> (TurbopackInternalError: Failed to restore task data (corrupted database or bug): Meta for TaskId 517)) {
+  location: 'turbopack\\crates\\turbo-tasks-backend\\src\\backend\\operation\\mod.rs:197:17'
+}
+Error [TurbopackInternalError]: Failed to restore task data (corrupted database or bug): Meta for TaskId 517)
+
+Debug info:
+- Execution of get_written_endpoint_with_issues_operation failed
+- Failed to restore task data (corrupted database or bug): Meta for TaskId 517)
+  
+  Caused by:
+      0: Looking up task storage for TaskId 517 from database failed
+      1: Unable to open static sorted file referenced from 00000006.meta
+      2: Unable to open static sorted file 00000002.sst
+      3: Failed to open SST file E:\Azlan_Dairy\AzlanDairy_RealWebsite\azlan_dairy_next_app\.next\dev\cache/turbopack\v16.2.12\00000002.sst
+      4: The system cannot find the path specified. (os error 3)
+    at <unknown> (TurbopackInternalError: Failed to restore task data (corrupted database or bug): Meta for TaskId 517)) {
+  location: 'turbopack\\crates\\turbo-tasks-backend\\src\\backend\\operation\\mod.rs:197:17'
+}
+Persisting failed: Another write batch or compaction is already active (Only a single write operations is allowed at a time)
+Compaction failed: Another write batch or compaction is already active (Only a single write operations is allowed at a time)
+[?25h

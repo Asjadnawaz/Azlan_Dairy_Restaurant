@@ -1,0 +1,239 @@
+"use client";
+
+import { useState, useEffect, useRef, useCallback } from "react";
+import { createBrowserClient } from "@/lib/supabase/client";
+import type { Order, OrderItem, Settings, OrderStatus } from "@/lib/supabase/database.types";
+import { OrderCard } from "./order-card";
+import { StoreToggle } from "./store-toggle";
+
+interface AdminDashboardProps {
+  initialOrders: Order[];
+  initialLineItems: OrderItem[];
+  settings: Settings | null;
+  userEmail: string;
+  signOutButton: React.ReactNode;
+}
+
+export function AdminDashboard({
+  initialOrders,
+  initialLineItems,
+  settings,
+  userEmail,
+  signOutButton,
+}: AdminDashboardProps) {
+  const [orders, setOrders] = useState<Order[]>(initialOrders);
+  const [lineItems, setLineItems] = useState<OrderItem[]>(initialLineItems);
+  const [isActive, setIsActive] = useState(settings?.is_active ?? true);
+  const [filter, setFilter] = useState<OrderStatus | "all">("all");
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const supabaseRef = useRef(createBrowserClient());
+
+  // Play alert sound
+  const playAlert = useCallback(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.currentTime = 0;
+    audio.play().catch((err) => {
+      console.warn("Audio playback blocked:", err);
+    });
+  }, []);
+
+  // Realtime subscriptions
+  useEffect(() => {
+    const supabase = supabaseRef.current;
+
+    // Listen for new orders (INSERT)
+    const orderChannel = supabase
+      .channel("admin-orders")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "orders" },
+        (payload) => {
+          const newOrder = payload.new as Order;
+          setOrders((prev) => {
+            if (prev.some((o) => o.id === newOrder.id)) return prev;
+            return [newOrder, ...prev];
+          });
+          playAlert();
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "orders" },
+        (payload) => {
+          const updated = payload.new as Order;
+          setOrders((prev) =>
+            prev.map((o) => (o.id === updated.id ? { ...o, ...updated } : o))
+          );
+        }
+      )
+      .subscribe();
+
+    // Listen for new line items
+    const itemChannel = supabase
+      .channel("admin-order-items")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "order_items" },
+        (payload) => {
+          const newItem = payload.new as OrderItem;
+          setLineItems((prev) => [...prev, newItem]);
+        }
+      )
+      .subscribe();
+
+    // Listen for settings changes (store toggle)
+    const settingsChannel = supabase
+      .channel("admin-settings")
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "settings" },
+        (payload) => {
+          const updated = payload.new as Settings;
+          setIsActive(updated.is_active);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(orderChannel);
+      supabase.removeChannel(itemChannel);
+      supabase.removeChannel(settingsChannel);
+    };
+  }, [playAlert]);
+
+  // Fetch line items for a new order (since INSERT on order_items may lag)
+  const fetchLineItems = useCallback(async (orderId: string) => {
+    const supabase = supabaseRef.current;
+    const { data } = await supabase
+      .from("order_items")
+      .select("*")
+      .eq("order_id", orderId);
+    if (data) {
+      setLineItems((prev) => {
+        const existingIds = new Set(prev.map((i) => i.id));
+        const fresh = (data as OrderItem[]).filter((i) => !existingIds.has(i.id));
+        return [...prev, ...fresh];
+      });
+    }
+  }, []);
+
+  // When a new order arrives, fetch its line items
+  useEffect(() => {
+    orders.forEach((order) => {
+      const hasItems = lineItems.some((i) => i.order_id === order.id);
+      if (!hasItems) {
+        fetchLineItems(order.id);
+      }
+    });
+  }, [orders, lineItems, fetchLineItems]);
+
+  const filtered =
+    filter === "all" ? orders : orders.filter((o) => o.status === filter);
+
+  const counts = {
+    all: orders.length,
+    pending: orders.filter((o) => o.status === "pending").length,
+    preparing: orders.filter((o) => o.status === "preparing").length,
+    ready: orders.filter((o) => o.status === "ready").length,
+    completed: orders.filter((o) => o.status === "completed").length,
+    cancelled: orders.filter((o) => o.status === "cancelled").length,
+  };
+
+  return (
+    <div className="min-h-screen bg-[var(--color-background)]">
+      <audio ref={audioRef} src="/audio/order-alert.wav" preload="auto" />
+
+      {/* Top bar */}
+      <header className="sticky top-0 z-50 bg-[var(--color-surface-container-lowest)] border-b border-[var(--color-outline-variant)] custom-shadow">
+        <div className="mx-auto max-w-7xl px-4 md:px-8 py-4 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <a href="/" className="text-[var(--color-on-surface-variant)] hover:text-[var(--color-primary)]">
+              <span className="material-symbols-outlined">arrow_back</span>
+            </a>
+            <div>
+              <h1 className="text-xl font-extrabold text-[var(--color-primary)]">
+                Admin Dashboard
+              </h1>
+              <p className="text-xs text-[var(--color-on-surface-variant)]">
+                Orders &amp; Store Management
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 sm:gap-3">
+            <StoreToggle isActive={isActive} onToggle={setIsActive} />
+
+            {/* User badge */}
+            <div className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-full bg-[var(--color-surface-container)]">
+              <span className="w-7 h-7 rounded-full bg-[var(--color-primary)] text-white flex items-center justify-center text-xs font-bold uppercase">
+                {userEmail.charAt(0)}
+              </span>
+              <span className="text-xs font-medium text-[var(--color-on-surface-variant)] max-w-[120px] truncate">
+                {userEmail}
+              </span>
+            </div>
+
+            {/* Sign out */}
+            {signOutButton}
+          </div>
+        </div>
+      </header>
+
+      {/* Stats bar */}
+      <div className="mx-auto max-w-7xl px-4 md:px-8 py-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        {([
+          { key: "all", label: "All", color: "var(--color-primary)" },
+          { key: "pending", label: "Pending", color: "#f59e0b" },
+          { key: "preparing", label: "Preparing", color: "#3b82f6" },
+          { key: "ready", label: "Ready", color: "#8b5cf6" },
+          { key: "completed", label: "Completed", color: "var(--color-success)" },
+          { key: "cancelled", label: "Cancelled", color: "var(--color-error)" },
+        ] as const).map((stat) => (
+          <button
+            key={stat.key}
+            onClick={() => setFilter(stat.key)}
+            className={`p-3 rounded-[var(--radius-lg)] border text-left transition-all
+              ${filter === stat.key
+                ? "border-[var(--color-primary)] bg-[var(--color-surface-container-low)] custom-shadow"
+                : "border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] hover:border-[var(--color-primary)]/30"}`}
+          >
+            <p className="text-2xl font-extrabold" style={{ color: stat.color }}>
+              {counts[stat.key]}
+            </p>
+            <p className="text-xs font-medium text-[var(--color-on-surface-variant)]">
+              {stat.label}
+            </p>
+          </button>
+        ))}
+      </div>
+
+      {/* Orders list */}
+      <div className="mx-auto max-w-7xl px-4 md:px-8 pb-16">
+        {filtered.length === 0 ? (
+          <div className="text-center py-20">
+            <span className="material-symbols-outlined text-[80px] text-[var(--color-on-surface-variant)]/30">
+              inbox
+            </span>
+            <p className="mt-4 font-semibold text-[var(--color-on-surface-variant)]">
+              No orders {filter !== "all" && `in "${filter}"`}
+            </p>
+            <p className="text-sm text-[var(--color-on-surface-variant)]/70 mt-1">
+              New orders will appear here automatically.
+            </p>
+          </div>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {filtered.map((order) => (
+              <OrderCard
+                key={order.id}
+                order={order}
+                items={lineItems.filter((i) => i.order_id === order.id)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
