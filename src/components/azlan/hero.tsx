@@ -1,27 +1,36 @@
 "use client";
 
 import type { Settings } from "@/lib/supabase/database.types";
-import { useMemo } from "react";
 
-// Check if current time (Karachi UTC+5) is within restaurant hours: 7 PM - 3 AM
+// Check if current time (Karachi UTC+5) is within restaurant hours: 7 PM – 3 AM
 function isWithinBusinessHours(): boolean {
   const now = new Date();
-  const karachi = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Karachi" }));
+  const karachi = new Date(
+    now.toLocaleString("en-US", { timeZone: "Asia/Karachi" })
+  );
   const hour = karachi.getHours();
-  // 7 PM (19) to midnight (23) = same day
-  // Midnight (0) to 3 AM = same day (after midnight)
   return hour >= 19 || hour < 3;
 }
 
 export function Hero({ settings }: { settings: Settings | null }) {
-  // Open if both: kill-switch is active AND current time is within business hours
   const isTimeBasedOpen = isWithinBusinessHours();
   const isKillSwitchActive = settings?.is_active ?? true;
   const isOpen = isKillSwitchActive && isTimeBasedOpen;
 
   return (
-    <section className="hero-section bg-[var(--color-primary)] text-white flex items-center">
+    <section className="hero-section text-white flex items-center">
+      {/* Background image */}
       <div className="hero-bg-image" />
+
+      {/* Layered dark gradient for deep, rich contrast */}
+      <div className="absolute inset-0 z-[1]"
+        style={{
+          background:
+            "linear-gradient(160deg, rgba(0,35,12,0.88) 0%, rgba(0,35,12,0.65) 50%, rgba(117,76,152,0.45) 100%)",
+        }}
+      />
+
+      {/* Ambient glow blobs */}
       <div className="hero-glow hero-glow-1" />
       <div className="hero-glow hero-glow-2" />
 
@@ -35,62 +44,125 @@ export function Hero({ settings }: { settings: Settings | null }) {
             height: `${4 + (i % 3) * 3}px`,
             left: `${(i * 7.14) % 100}%`,
             bottom: `-20px`,
-            background: i % 2 === 0 ? "var(--color-mint-accent)" : "rgba(255,255,255,0.7)",
+            background:
+              i % 2 === 0
+                ? "var(--color-mint-accent)"
+                : "rgba(255,255,255,0.4)",
             animationDuration: `${7 + (i % 8)}s`,
             animationDelay: `${i * 0.5}s`,
           }}
         />
       ))}
 
-      <div className="relative z-10 mx-auto max-w-7xl px-4 md:px-8 py-20 md:py-32 w-full">
-        {/* Status badge */}
-        <span
-          className={`inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-semibold backdrop-blur-sm ring-1
-            ${isOpen
-              ? "bg-white/10 text-[var(--color-mint-accent)] ring-white/20"
-              : "bg-[var(--color-error)]/20 text-red-200 ring-red-400/30"}`}
+      {/* Main content */}
+      <div className="relative z-10 mx-auto max-w-4xl w-full px-4 md:px-8 py-24 md:py-40 flex flex-col items-center text-center gap-6">
+
+        {/* ── OPEN / CLOSED STATUS BANNER ── */}
+        <div
+          className={`inline-flex items-center gap-3 px-6 py-3 rounded-2xl font-extrabold text-base sm:text-lg backdrop-blur-sm shadow-lg ${
+            isOpen
+              ? "bg-green-500/20 border-2 border-green-400/60 text-green-300"
+              : "bg-red-600/20 border-2 border-red-400/60 text-red-300"
+          }`}
         >
-          <span
-            className={`h-2 w-2 rounded-full ${isOpen ? "bg-[var(--color-mint-accent)] animate-pulse" : "bg-red-400"}`}
-          />
-          {isOpen ? "Open Now" : "Currently Closed"} · {settings?.hours ?? "7:00 PM – 3:00 AM"}
-        </span>
+          {/* Pulsing dot */}
+          <span className="relative flex h-4 w-4 shrink-0">
+            <span
+              className={`absolute inline-flex h-full w-full rounded-full opacity-75 ${
+                isOpen ? "bg-green-400 animate-ping" : "bg-red-400"
+              }`}
+            />
+            <span
+              className={`relative inline-flex h-4 w-4 rounded-full ${
+                isOpen ? "bg-green-400" : "bg-red-500"
+              }`}
+            />
+          </span>
 
-        {/* Headline */}
-        <h1 className="mt-6 text-4xl sm:text-5xl md:text-6xl xl:text-7xl font-extrabold tracking-tight-hero leading-[1.05]">
-          <span className="text-[var(--color-mint-accent)]">Azlan Dairy</span>
-          <br />
-          <span className="text-white">Restaurant</span>
-        </h1>
+          {isOpen ? (
+            <>
+              <span className="material-symbols-outlined text-[22px] text-green-400">
+                storefront
+              </span>
+              We&apos;re Open — Order Now!
+            </>
+          ) : (
+            <>
+              <span className="material-symbols-outlined text-[22px] text-red-400">
+                store
+              </span>
+              We&apos;re Currently Closed
+            </>
+          )}
+        </div>
 
-        {/* Subhead */}
-        <p className="mt-5 max-w-xl text-base md:text-lg text-white/80 leading-relaxed">
-          100% Pure, Fresh & Organic Dairy from our own farm. Char-grilled BBQ, crispy broast, juicy burgers & more —
-          delivered hot to your doorstep.
+
+        {/* Eyebrow tag */}
+        <p className="text-xs sm:text-sm font-bold uppercase tracking-[0.25em] text-[var(--color-mint-accent)]">
+          🍔 Malir&apos;s Favourite Fast Food Destination
         </p>
 
-        {/* Malir Delivery Notice */}
-        <div className="mt-6 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[var(--color-secondary-brand)]/20 backdrop-blur-sm border border-[var(--color-secondary-brand)]/30">
-          <span className="material-symbols-outlined text-[18px] text-[var(--color-mint-accent)]">location_on</span>
-          <span className="text-sm font-semibold text-white">We Deliver Exclusively in Malir</span>
-        </div>
+        {/* Main headline */}
+        <h1 className="text-4xl sm:text-6xl md:text-7xl font-extrabold tracking-tight-hero leading-[1.05]">
+          <span className="text-white">Hot. Crispy.</span>
+          <br />
+          <span className="shimmer-text">Delivered Fresh.</span>
+        </h1>
 
-        {/* CTAs */}
-        <div className="mt-8 flex flex-wrap items-center gap-3">
-          <a
-            href="#menu"
-            className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-[var(--color-secondary-brand)] text-white
-              font-bold hover:bg-[var(--color-secondary-brand)]/90 transition-all custom-shadow"
-          >
-            <span className="material-symbols-outlined text-[20px]">restaurant_menu</span>
-            Explore Our Menu
-          </a>
-        </div>
+        {/* Supporting line */}
+        <p className="text-lg sm:text-xl md:text-2xl font-semibold text-white/90">
+          Zinger Burgers &nbsp;·&nbsp; Cheesy Pizzas &nbsp;·&nbsp; Loaded Rolls
+        </p>
 
+        {/* Sub-copy */}
+        <p className="max-w-xl text-sm sm:text-base text-white/65 leading-relaxed">
+          Craving something crispy and bold? We craft every order with premium
+          fresh ingredients and deliver it piping hot — right to your door in Malir.
+        </p>
+
+        {/* CTA */}
+        <a
+          href="#menu"
+          className="mt-2 inline-flex items-center gap-2 px-8 py-4 rounded-full font-extrabold text-base sm:text-lg transition-all duration-200 hover:brightness-110 hover:-translate-y-1 custom-shadow-lg"
+          style={{
+            background: "var(--color-cta-yellow)",
+            color: "var(--color-primary)",
+          }}
+        >
+          <span className="material-symbols-outlined text-[22px]">
+            local_pizza
+          </span>
+          Explore Full Menu
+        </a>
+
+        {/* Divider */}
+        <div className="w-16 h-px bg-[var(--color-mint-accent)]/40 mt-2" />
+
+        {/* Trust badges */}
+        <ul className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-8">
+          {[
+            { icon: "lunch_dining", text: "100% Fresh Ingredients"    },
+            { icon: "bolt",         text: "Fast Delivery · Malir Only" },
+            { icon: "map",          text: "Live Order Tracking"         },
+          ].map(({ icon, text }) => (
+            <li
+              key={text}
+              className="flex items-center gap-2 text-white/70 text-xs sm:text-sm font-medium"
+            >
+              <span
+                className="material-symbols-outlined text-[18px]"
+                style={{ color: "var(--color-mint-accent)" }}
+              >
+                {icon}
+              </span>
+              {text}
+            </li>
+          ))}
+        </ul>
       </div>
 
       {/* Scroll hint */}
-      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 text-white/50 animate-bounce-y">
+      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 text-white/30 animate-bounce-y">
         <span className="material-symbols-outlined">keyboard_arrow_down</span>
       </div>
     </section>

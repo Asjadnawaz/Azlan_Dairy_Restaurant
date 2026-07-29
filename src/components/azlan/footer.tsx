@@ -78,7 +78,7 @@ export function Footer({ settings }: { settings: Settings | null }) {
           <ul className="mt-3 space-y-2 text-sm text-white/70">
             <li className="flex items-start gap-2">
               <span className="material-symbols-outlined text-[16px] mt-0.5">location_on</span>
-              <span>{settings?.address ?? "Main Khokhrapar no. 2 1/2, Malir, Karachi."}</span>
+              <span>{settings?.address ?? "Main Khokhrapar no. 2.5, Malir, Karachi."}</span>
             </li>
             <li className="flex items-center gap-2">
               <span className="material-symbols-outlined text-[16px]">schedule</span>

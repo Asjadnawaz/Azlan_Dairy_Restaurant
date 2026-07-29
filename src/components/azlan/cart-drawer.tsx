@@ -53,10 +53,15 @@ export function CartDrawer({ isStoreActive }: CartDrawerProps) {
   const [userId, setUserId] = useState<string | null>(null);
 
   // Save order to localStorage after successful placement
-  const saveOrderToStorage = (orderNumber: string, phone: string, total: number) => {
+  const saveOrderToStorage = (
+    orderNumber: string,
+    phone: string,
+    total: number,
+    itemsSnapshot: { id: string; name: string; price: number; quantity: number; image_path?: string | null }[]
+  ) => {
     try {
       const stored = JSON.parse(localStorage.getItem("azlan-orders") || "[]");
-      stored.unshift({ orderNumber, phone, total, timestamp: Date.now() });
+      stored.unshift({ orderNumber, phone, total, timestamp: Date.now(), items: itemsSnapshot });
       localStorage.setItem("azlan-orders", JSON.stringify(stored.slice(0, 5))); // Keep last 5
     } catch {}
   };
@@ -186,7 +191,12 @@ export function CartDrawer({ isStoreActive }: CartDrawerProps) {
       close();
 
       // 4. Save order to localStorage for tracking page
-      saveOrderToStorage(orderNumber, form.phone, total);
+      saveOrderToStorage(
+        orderNumber,
+        form.phone,
+        total,
+        items.map((i) => ({ id: i.id, name: i.name, price: i.price, quantity: i.quantity, image_path: i.image_path }))
+      );
 
       // 5. Show animated confirmation modal
       setConfirmed(snapshot);

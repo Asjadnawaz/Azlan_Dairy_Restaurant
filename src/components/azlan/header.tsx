@@ -89,9 +89,17 @@ export function Header() {
             height={40}
             className="h-10 w-10 rounded-full object-cover ring-2 ring-[var(--color-mint-accent)]/40 shrink-0"
           />
-          <span className="flex flex-col leading-none">
-            <span className="text-lg sm:text-xl font-extrabold tracking-tight text-[var(--color-primary)]">
-              Azlan Dairy Restaurant
+          <span className="flex flex-col leading-none gap-1.5">
+            <span
+              className="text-base sm:text-lg font-extrabold tracking-tight text-[var(--color-primary)] leading-none"
+              style={{ letterSpacing: "-0.02em" }}
+            >
+              Azlan Dairy
+            </span>
+            <span
+              className="text-[10px] sm:text-xs font-bold uppercase tracking-[0.18em] text-[var(--color-secondary-brand)] leading-none -mt-0.5"
+            >
+              Restaurant
             </span>
           </span>
         </Link>

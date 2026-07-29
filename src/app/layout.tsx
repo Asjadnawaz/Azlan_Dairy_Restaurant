@@ -20,6 +20,12 @@ const plusJakarta = Plus_Jakarta_Sans({
 export const metadata: Metadata = {
   title: "Azlan Dairy Restaurant",
   description: "Farm to Table Premium - Azlan Dairy Restaurant, Karachi",
+  icons: {
+    icon: [
+      { url: "/images/logo.png", type: "image/png" }
+    ],
+    apple: [{ url: "/images/logo.png", type: "image/png" }]
+  },
 };
 
 export default async function RootLayout({
