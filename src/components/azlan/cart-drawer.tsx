@@ -138,6 +138,14 @@ export function CartDrawer({ isStoreActive }: CartDrawerProps) {
       return;
     }
 
+    // Debug log to check delivery values
+    console.log("📍 DEBUG - Submitting order with delivery data:", {
+      deliveryFee,
+      deliveryDistance,
+      deliveryLocation,
+      hasLocation: deliveryLocation !== null,
+    });
+
     setSubmitting(true);
 
     try {

@@ -27,6 +27,14 @@ export async function POST(req: NextRequest) {
   try {
     const body = (await req.json()) as CreateOrderBody;
 
+    // Debug log to check incoming delivery data
+    console.log("📍 API - Received order data:", {
+      delivery_fee: body.delivery_fee,
+      delivery_distance_km: body.delivery_distance_km,
+      delivery_coordinates: body.delivery_coordinates,
+      hasCoordinates: body.delivery_coordinates !== null && body.delivery_coordinates !== undefined,
+    });
+
     // Server-side validation
     const name = body.customer_name?.trim();
     const phone = body.customer_phone?.trim();
@@ -116,6 +124,7 @@ export async function POST(req: NextRequest) {
     const updateData: any = {
       delivery_distance_km: body.delivery_distance_km,
       delivery_coordinates: body.delivery_coordinates,
+      delivery_fee: body.delivery_fee,
     };
 
     if (user?.id) {

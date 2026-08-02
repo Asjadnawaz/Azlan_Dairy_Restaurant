@@ -154,6 +154,34 @@ export function OrderCard({
           <span className="material-symbols-outlined text-[16px] mt-0.5">location_on</span>
           <span className="flex-1">{order.customer_address}</span>
         </div>
+
+        {/* Delivery Information */}
+        {order.delivery_coordinates && (
+          <div className="mt-3 p-3 rounded-lg bg-[var(--color-surface-container-low)] space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-[16px] text-[var(--color-primary)]">straight</span>
+                <span className="text-xs text-[var(--color-on-surface-variant)]">
+                  {order.delivery_distance_km ? `${order.delivery_distance_km.toFixed(1)} km` : "Distance calculated"}
+                </span>
+              </div>
+              <span className="font-bold text-sm text-[var(--color-primary)]">
+                Delivery: Rs. {order.delivery_fee || 0}
+              </span>
+            </div>
+
+            {/* Google Maps Navigation Button */}
+            <a
+              href={`https://www.google.com/maps/search/?api=1&query=${order.delivery_coordinates.lat},${order.delivery_coordinates.lng}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-full bg-[var(--color-primary)] text-white text-xs font-bold hover:bg-[var(--color-primary-container)] transition-colors"
+            >
+              <span className="material-symbols-outlined text-[16px]">navigation</span>
+              Open in Google Maps
+            </a>
+          </div>
+        )}
         {order.customer_note && (
           <div className="flex items-start gap-2 text-[var(--color-on-surface-variant)]">
             <span className="material-symbols-outlined text-[16px] mt-0.5">sticky_note_2</span>
