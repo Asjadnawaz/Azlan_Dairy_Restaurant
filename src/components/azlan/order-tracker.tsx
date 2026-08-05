@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createBrowserClient } from "@/lib/supabase/client";
 import type { Order, OrderItem, Settings } from "@/lib/supabase/database.types";
 import { RealtimeChannel } from "@supabase/supabase-js";
+import { OrderReviewSection } from "./order-review-section";
 
 interface OrderTrackerProps {
   order: Order;
@@ -224,6 +225,11 @@ export function OrderTracker({ order, items, settings }: OrderTrackerProps) {
           </div>
         </div>
       </div>
+
+      {/* Dynamic Review Section for Completed / Delivered Orders */}
+      {(currentStatus === "completed" || order.status === "completed" || Boolean(order.completed_at)) && (
+        <OrderReviewSection order={order} items={items} />
+      )}
 
       {/* Customer Info Card */}
       <div className="bg-[var(--color-surface-container-lowest)] rounded-[var(--radius-2xl)] border border-[var(--color-surface-variant)] p-6">

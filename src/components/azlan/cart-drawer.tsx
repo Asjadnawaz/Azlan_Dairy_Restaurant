@@ -28,7 +28,7 @@ export function CartDrawer({ isStoreActive }: CartDrawerProps) {
 
   const [form, setForm] = useState({
     name: "",
-    phone: "",
+    phone: "03",
     address: "",
     note: "",
   });
@@ -51,6 +51,7 @@ export function CartDrawer({ isStoreActive }: CartDrawerProps) {
   } | null>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<"cod" | "online">("cod");
 
   // Save order to localStorage after successful placement
   const saveOrderToStorage = (
@@ -63,7 +64,7 @@ export function CartDrawer({ isStoreActive }: CartDrawerProps) {
       const stored = JSON.parse(localStorage.getItem("azlan-orders") || "[]");
       stored.unshift({ orderNumber, phone, total, timestamp: Date.now(), items: itemsSnapshot });
       localStorage.setItem("azlan-orders", JSON.stringify(stored.slice(0, 5))); // Keep last 5
-    } catch {}
+    } catch { }
   };
 
   useEffect(() => {
@@ -194,7 +195,7 @@ export function CartDrawer({ isStoreActive }: CartDrawerProps) {
 
       // 3. Clear cart + reset form
       clear();
-      setForm({ name: "", phone: "", address: "", note: "" });
+      setForm({ name: "", phone: "03", address: "", note: "" });
       setStep("cart");
       close();
 
@@ -438,9 +439,25 @@ export function CartDrawer({ isStoreActive }: CartDrawerProps) {
                 <input
                   type="tel"
                   value={form.phone}
-                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                  placeholder="+92 300 1234567"
-                  className="w-full h-11 rounded-[var(--radius-md)] bg-[var(--color-surface-container)] border border-[var(--color-outline-variant)] px-4 text-sm focus:outline-none focus:border-[var(--color-primary)]/40 focus:ring-2 focus:ring-[var(--color-primary)]/10 transition-all"
+                  onChange={(e) => {
+                    let val = e.target.value;
+                    const digits = val.replace(/\D/g, "");
+                    if (digits.length === 0) {
+                      val = "03";
+                    } else if (digits.startsWith("03")) {
+                      val = digits.slice(0, 11);
+                    } else if (digits.startsWith("3")) {
+                      val = "0" + digits.slice(0, 10);
+                    } else if (digits.startsWith("923")) {
+                      val = "0" + digits.slice(2, 12);
+                    } else {
+                      val = "03" + digits.slice(0, 9);
+                    }
+                    setForm({ ...form, phone: val });
+                  }}
+                  placeholder="03001234567"
+                  maxLength={11}
+                  className="w-full h-11 rounded-[var(--radius-md)] bg-[var(--color-surface-container)] border border-[var(--color-outline-variant)] px-4 text-sm focus:outline-none focus:border-[var(--color-primary)]/40 focus:ring-2 focus:ring-[var(--color-primary)]/10 transition-all font-medium"
                 />
               </div>
               <div>
@@ -476,11 +493,37 @@ export function CartDrawer({ isStoreActive }: CartDrawerProps) {
                   className="w-full h-11 rounded-[var(--radius-md)] bg-[var(--color-surface-container)] border border-[var(--color-outline-variant)] px-4 text-sm focus:outline-none focus:border-[var(--color-primary)]/40 focus:ring-2 focus:ring-[var(--color-primary)]/10 transition-all"
                 />
               </div>
+
+              {/* Payment Method */}
+              <div className="pt-2">
+                <label className="block text-sm font-semibold mb-2">Payment Method</label>
+                <div className="flex items-center justify-between p-3.5 rounded-[var(--radius-lg)] border-2 border-[var(--color-primary)] bg-[var(--color-surface-container-low)]">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-full bg-[var(--color-primary)] text-white flex items-center justify-center shrink-0">
+                      <span className="material-symbols-outlined text-[20px]">payments</span>
+                    </div>
+                    <div>
+                      <p className="font-extrabold text-sm text-[var(--color-on-surface)]">Cash on Delivery (COD)</p>
+                      <p className="text-xs text-[var(--color-on-surface-variant)]">Pay with cash upon food delivery</p>
+                    </div>
+                  </div>
+                  <div className="w-5 h-5 rounded-full bg-[var(--color-primary)] text-white flex items-center justify-center shrink-0">
+                    <span className="material-symbols-outlined text-[14px] font-bold">check</span>
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* Order summary */}
-            <div className="p-4 rounded-[var(--radius-lg)] bg-[var(--color-surface-container-low)] space-y-1.5 text-sm">
-              <div className="flex justify-between font-semibold">
+            <div className="p-4 rounded-[var(--radius-lg)] bg-[var(--color-surface-container-low)] space-y-2 text-sm">
+              <div className="flex justify-between items-center text-xs text-[var(--color-on-surface-variant)]">
+                <span>Payment Option</span>
+                <span className="font-bold text-[var(--color-primary)] bg-[var(--color-surface-container-highest)] px-2.5 py-1 rounded-full flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[14px]">payments</span>
+                  Cash on Delivery
+                </span>
+              </div>
+              <div className="flex justify-between font-semibold border-t border-[var(--color-outline-variant)]/60 pt-2">
                 <span>Total ({itemCount} items)</span>
                 <span className="text-[var(--color-primary)] text-lg">Rs. {total}</span>
               </div>
