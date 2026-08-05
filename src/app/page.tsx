@@ -3,6 +3,7 @@ import type { Item, Settings } from "@/lib/supabase/database.types";
 import { Hero } from "@/components/azlan/hero";
 import { TrustSection } from "@/components/azlan/trust-section";
 import { MenuSection } from "@/components/azlan/menu-section";
+import { TestimonialsSection } from "@/components/azlan/testimonials-section";
 import { AboutSection } from "@/components/azlan/about-section";
 import { Footer } from "@/components/azlan/footer";
 
@@ -27,6 +28,7 @@ export default async function Home() {
       <Hero settings={settings} />
       <TrustSection />
       <MenuSection items={items} isStoreActive={isStoreActive} />
+      <TestimonialsSection />
       <AboutSection />
       <Footer settings={settings} />
     </>

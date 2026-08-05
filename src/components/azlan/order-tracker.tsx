@@ -248,38 +248,42 @@ export function OrderTracker({ order, items, settings }: OrderTrackerProps) {
           )}
 
           {/* Delivery Coordinates and Navigation */}
-          {order.delivery_coordinates && (
-            <div className="mt-4 p-4 rounded-xl bg-[var(--color-surface-container-low)] space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="material-symbols-outlined text-[16px] text-[var(--color-primary)]">straight</span>
-                  <span className="text-xs text-[var(--color-on-surface-variant)]">
-                    {order.delivery_distance_km ? `${order.delivery_distance_km.toFixed(1)} km` : "Distance calculated"}
-                  </span>
-                </div>
-                <span className="font-bold text-sm text-[var(--color-primary)]">
-                  Delivery: Rs. {order.delivery_fee || 0}
+          <div className="mt-4 p-4 rounded-xl bg-[var(--color-surface-container-low)] space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-[16px] text-[var(--color-primary)]">straight</span>
+                <span className="text-xs text-[var(--color-on-surface-variant)]">
+                  {order.delivery_distance_km ? `${order.delivery_distance_km.toFixed(1)} km` : "Standard delivery"}
                 </span>
               </div>
+              <span className="font-bold text-sm text-[var(--color-primary)]">
+                Delivery: Rs. {order.delivery_fee || 60}
+              </span>
+            </div>
 
+            {order.delivery_coordinates && (
               <div className="flex items-center gap-2 text-xs text-[var(--color-on-surface-variant)]">
                 <span className="material-symbols-outlined text-[14px]">my_location</span>
                 <span>
                   {order.delivery_coordinates.lat.toFixed(6)}, {order.delivery_coordinates.lng.toFixed(6)}
                 </span>
               </div>
+            )}
 
-              <a
-                href={`https://www.google.com/maps/search/?api=1&query=${order.delivery_coordinates.lat},${order.delivery_coordinates.lng}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[var(--color-primary)] text-white text-xs font-bold hover:bg-[var(--color-primary-container)] transition-colors"
-              >
-                <span className="material-symbols-outlined text-[16px]">navigation</span>
-                Navigate in Google Maps
-              </a>
-            </div>
-          )}
+            <a
+              href={
+                order.delivery_coordinates
+                  ? `https://www.google.com/maps/search/?api=1&query=${order.delivery_coordinates.lat},${order.delivery_coordinates.lng}`
+                  : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(order.customer_address)}`
+              }
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[var(--color-primary)] text-white text-xs font-bold hover:bg-[var(--color-primary-container)] transition-colors"
+            >
+              <span className="material-symbols-outlined text-[16px]">navigation</span>
+              Navigate in Google Maps
+            </a>
+          </div>
         </div>
       </div>
 

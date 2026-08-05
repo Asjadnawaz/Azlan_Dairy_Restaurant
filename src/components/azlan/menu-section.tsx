@@ -36,7 +36,7 @@ export function MenuSection({
   return (
     <section id="menu" className="scroll-mt-[130px]">
       {/* Sticky category tabs */}
-      <div className="sticky top-[57px] z-40 bg-[var(--color-background)]/95 backdrop-blur-md border-b border-[var(--color-outline-variant)]/40">
+      <div className="sticky top-[57px] z-30 bg-[var(--color-background)]/95 backdrop-blur-md border-b border-[var(--color-outline-variant)]/40">
         <div
           ref={tabRef}
           className="mx-auto max-w-7xl px-4 md:px-8 py-3 flex gap-2 overflow-x-auto no-scrollbar"

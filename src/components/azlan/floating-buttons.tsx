@@ -15,14 +15,19 @@ export function FloatingButtons() {
   }, []);
 
   return (
-    <div className="fixed bottom-5 right-5 sm:bottom-6 sm:right-6 z-40 flex flex-col gap-3 items-end">
+    <div
+      className={`fixed bottom-5 right-5 sm:bottom-6 sm:right-6 z-40 flex flex-col gap-3 items-end transition-all duration-300 ${
+        show
+          ? "opacity-100 scale-100 translate-y-0 visible"
+          : "opacity-0 scale-0 translate-y-12 pointer-events-none invisible"
+      }`}
+    >
       {/* Back to top */}
       <button
         onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-        className={`w-11 h-11 rounded-full bg-[var(--color-surface-container-lowest)] custom-shadow
+        className="w-11 h-11 rounded-full bg-[var(--color-surface-container-lowest)] custom-shadow
           flex items-center justify-center text-[var(--color-primary)]
-          transition-all hover:scale-110
-          ${show ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4 pointer-events-none"}`}
+          transition-all hover:scale-110"
         aria-label="Back to top"
       >
         <span className="material-symbols-outlined text-[22px]">keyboard_arrow_up</span>
@@ -31,9 +36,8 @@ export function FloatingButtons() {
       {/* Cart button */}
       <button
         onClick={openCart}
-        className={`relative w-14 h-14 rounded-full bg-[var(--color-primary)] text-white
-          custom-shadow-lg flex items-center justify-center transition-all hover:scale-110
-          ${show ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4 pointer-events-none"}`}
+        className="relative w-14 h-14 rounded-full bg-[var(--color-primary)] text-white
+          custom-shadow-lg flex items-center justify-center transition-all hover:scale-110"
         aria-label="Open cart"
       >
         <span className="material-symbols-outlined text-[26px]">shopping_cart</span>

@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+.font-nastaliq {
+  font-family: 'Jameel Noori Nastaliq', 'Noto Nastaliq Urdu', 'Urdu Typesetting', serif;
+}
+
 @theme inline {
   /* Font */
   --font-jakarta: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
@@ -184,8 +188,8 @@ body {
   height: 350px;
   bottom: -50px;
   right: -40px;
-  background: #754c98;
-  opacity: 0.25;
+  background: var(--color-mint-accent);
+  opacity: 0.15;
   animation: floatGlow 11s ease-in-out infinite reverse;
 }
 
@@ -349,6 +353,15 @@ body {
   }
 }
 
+@keyframes marqueeRight {
+  0% {
+    transform: translateX(-50%);
+  }
+  100% {
+    transform: translateX(0%);
+  }
+}
+
 @keyframes fadeUp {
   from {
     opacity: 0;
@@ -469,6 +482,14 @@ body {
 
 .animate-marquee {
   animation: marquee 22s linear infinite;
+}
+
+.animate-marquee-right {
+  animation: marqueeRight 16s linear infinite;
+}
+
+.animate-marquee-right:hover {
+  animation-play-state: paused;
 }
 
 .animate-soft-pulse {

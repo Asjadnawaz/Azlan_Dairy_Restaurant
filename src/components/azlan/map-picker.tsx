@@ -70,6 +70,20 @@ export function MapPicker({ onLocationSelect, initialLocation }: MapPickerProps)
 
   return (
     <div className="space-y-3">
+      {/* Important Delivery Instructions */}
+      <div className="p-4 rounded-[var(--radius-xl)] bg-amber-100 dark:bg-amber-950/80 border-2 border-amber-500 shadow-sm space-y-2.5">
+        <div className="flex items-center gap-2 font-extrabold text-xs uppercase tracking-wide text-amber-900 dark:text-amber-300">
+          <span className="material-symbols-outlined text-[20px] text-amber-600 dark:text-amber-400">warning</span>
+          <span>Important Notice / اہم ہدایت</span>
+        </div>
+        <p className="text-xs font-bold text-amber-950 dark:text-amber-100 leading-relaxed">
+          📍 This is very important: Please select your exact location on the map below. We will deliver your order directly to your exact location.
+        </p>
+        <p className="font-nastaliq text-base sm:text-lg leading-loose text-right font-extrabold pt-2 border-t border-amber-300/80 dark:border-amber-700/80 text-amber-950 dark:text-amber-100" dir="rtl">
+          یہ بہت ضروری ہے! براہ کرم نیچے نقشے پر اپنی بالکل درست لوکیشن منتخب کریں۔ ہم آپ کا آرڈر آپ کے فراہم کردہ بالکل درست مقام پر پہنچائیں گے۔
+        </p>
+      </div>
+
       <div className="flex items-center justify-between">
         <p className="text-sm font-semibold text-[var(--color-on-surface)]">
           Select your delivery location on the map

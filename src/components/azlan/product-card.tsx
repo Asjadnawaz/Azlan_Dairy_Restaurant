@@ -28,7 +28,6 @@ export function ProductCard({ item, isStoreActive }: { item: Item; isStoreActive
     setTimeout(() => setAdded(false), 1400);
   }
 
-  const isBestseller = item.badges?.includes("Bestseller") || item.badges?.includes("Chef Special");
   const isPopular = item.badges?.includes("Popular") || item.badges?.includes("Hot Seller");
   const isSpicy = item.tags?.includes("spicy") || item.tags?.includes("fried");
   const isVeg = item.badges?.includes("Veg");
@@ -52,12 +51,6 @@ export function ProductCard({ item, isStoreActive }: { item: Item; isStoreActive
 
         {/* Badges */}
         <div className="absolute top-2 left-2 flex flex-col gap-1">
-          {isBestseller && (
-            <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-amber-400 text-[10px] font-bold text-black">
-              <span className="material-symbols-outlined" style={{ fontSize: 12 }}>star</span>
-              Bestseller
-            </span>
-          )}
           {isPopular && (
             <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-[var(--color-success)] text-[10px] font-bold text-white">
               <span className="material-symbols-outlined" style={{ fontSize: 12 }}>local_fire_department</span>
@@ -70,14 +63,6 @@ export function ProductCard({ item, isStoreActive }: { item: Item; isStoreActive
             </span>
           )}
         </div>
-
-        {/* Favorite */}
-        <button
-          className="absolute top-2 right-2 w-8 h-8 rounded-full bg-white/80 backdrop-blur-sm flex items-center justify-center text-[var(--color-error)] hover:bg-white transition-colors"
-          aria-label="Add to favorites"
-        >
-          <span className="material-symbols-outlined text-[18px]">favorite_border</span>
-        </button>
 
         {/* Price pill */}
         <div className="absolute bottom-2 right-2 px-2.5 py-1 rounded-full bg-[var(--color-primary)] text-white text-sm font-bold">

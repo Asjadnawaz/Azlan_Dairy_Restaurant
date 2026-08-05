@@ -79,7 +79,7 @@ export function Header() {
         ${scrolled ? "custom-shadow-lg" : "shadow-sm"}
         bg-[var(--color-surface-container-lowest)]/90 backdrop-blur-md`}
     >
-      <div className="mx-auto flex h-[57px] max-w-7xl items-center justify-between px-4 md:px-8">
+      <div className="relative mx-auto flex h-[57px] max-w-7xl items-center justify-between px-4 md:px-8">
         {/* Logo + Brand */}
         <Link href="/" className="flex items-center gap-2.5 shrink-0">
           <img
@@ -97,51 +97,28 @@ export function Header() {
               Azlan Dairy
             </span>
             <span
-              className="text-[10px] sm:text-xs font-bold uppercase tracking-[0.18em] text-[var(--color-secondary-brand)] leading-none -mt-0.5"
+              className="text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.15em] text-[var(--color-secondary-brand)] leading-none -mt-0.5"
             >
-              Restaurant
+              Fast Food & B B Q point
             </span>
           </span>
         </Link>
 
         {/* Desktop nav links */}
-        <nav className="hidden lg:flex items-center gap-5 text-sm font-medium text-[var(--color-on-surface-variant)]">
-          <Link href="#popular" className="hover:text-[var(--color-primary)] transition-colors">
-            Popular
+        <nav className="hidden lg:flex absolute left-1/2 -translate-x-1/2 items-center gap-6 text-sm font-medium text-[var(--color-on-surface-variant)]">
+          <Link href="/" className="hover:text-[var(--color-primary)] transition-colors">
+            Home
           </Link>
-          {CATEGORIES.slice(0, 3).map((cat) => (
-            <Link
-              key={cat}
-              href={`#${slugify(cat)}`}
-              className="hover:text-[var(--color-primary)] transition-colors"
-            >
-              {cat}
-            </Link>
-          ))}
+          <Link href="#menu" className="hover:text-[var(--color-primary)] transition-colors">
+            Our Menu
+          </Link>
           <Link href="#about" className="hover:text-[var(--color-primary)] transition-colors">
-            About
-          </Link>
-          <Link
-            href="/orders"
-            className="px-3 py-1.5 rounded-full bg-[var(--color-surface-container-highest)] hover:bg-[var(--color-primary)] hover:text-white transition-colors flex items-center gap-1"
-          >
-            <span className="material-symbols-outlined text-[16px]">shopping_bag</span>
-            My Orders
+            About Us
           </Link>
         </nav>
 
         {/* Actions */}
         <div className="flex items-center gap-1">
-          <Link
-            href="/admin/orders"
-            className="hidden sm:flex p-2 rounded-full hover:bg-[var(--color-surface-container)] transition-colors"
-            title="Admin Dashboard"
-          >
-            <span className="material-symbols-outlined text-[22px] text-[var(--color-on-surface)]">
-              receipt_long
-            </span>
-          </Link>
-
           {/* Auth Button or User Profile */}
           {user ? (
             <div className="relative group">
@@ -234,28 +211,26 @@ export function Header() {
               </button>
             </div>
             <div className="space-y-1">
-              <Link href="#popular" onClick={() => setMobileOpen(false)} className="block py-2 font-medium hover:text-[var(--color-primary)]">
-                Popular
+              <Link
+                href="/"
+                onClick={() => setMobileOpen(false)}
+                className="block py-2 font-medium hover:text-[var(--color-primary)] transition-colors"
+              >
+                Home
               </Link>
-              {CATEGORIES.map((cat) => (
-                <Link
-                  key={cat}
-                  href={`#${slugify(cat)}`}
-                  onClick={() => setMobileOpen(false)}
-                  className="block py-2 font-medium hover:text-[var(--color-primary)] transition-colors"
-                >
-                  {cat}
-                </Link>
-              ))}
-              <Link href="#about" onClick={() => setMobileOpen(false)} className="block py-2 font-medium hover:text-[var(--color-primary)]">
-                About
+              <Link
+                href="#menu"
+                onClick={() => setMobileOpen(false)}
+                className="block py-2 font-medium hover:text-[var(--color-primary)] transition-colors"
+              >
+                Our Menu
               </Link>
-              <Link href="/orders" onClick={() => setMobileOpen(false)} className="block py-2 font-medium text-[var(--color-primary)] flex items-center gap-1">
-                <span className="material-symbols-outlined text-[18px]">shopping_bag</span>
-                My Orders
-              </Link>
-              <Link href="/admin/orders" onClick={() => setMobileOpen(false)} className="block py-2 font-medium text-[var(--color-secondary-brand)]">
-                Admin Dashboard →
+              <Link
+                href="#about"
+                onClick={() => setMobileOpen(false)}
+                className="block py-2 font-medium hover:text-[var(--color-primary)] transition-colors"
+              >
+                About Us
               </Link>
 
               {/* Mobile Auth Section */}

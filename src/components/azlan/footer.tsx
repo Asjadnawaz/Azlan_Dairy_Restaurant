@@ -28,7 +28,7 @@ export function Footer({ settings }: { settings: Settings | null }) {
               className="h-10 w-10 rounded-full object-cover ring-2 ring-white/20"
             />
             <h3 className="text-xl font-extrabold leading-tight">
-              {settings?.store_name ?? "Azlan Dairy Restaurant"}
+              {settings?.store_name ?? "Azlan Dairy Fast Food & B B Q point"}
             </h3>
           </div>
           <p className="mt-3 text-sm text-white/60 leading-relaxed">
@@ -64,9 +64,6 @@ export function Footer({ settings }: { settings: Settings | null }) {
             <li>
               <a href="#menu" className="hover:text-white transition-colors">Full Menu</a>
             </li>
-            <li>
-              <a href="/admin/orders" className="hover:text-white transition-colors">Admin Dashboard</a>
-            </li>
           </ul>
         </div>
 
@@ -91,7 +88,7 @@ export function Footer({ settings }: { settings: Settings | null }) {
       {/* Bottom bar */}
       <div className="border-t border-white/10">
         <div className="mx-auto max-w-7xl px-4 md:px-8 py-4 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-white/50">
-          <p>© {new Date().getFullYear()} {settings?.store_name ?? "Azlan Dairy Restaurant"}. All rights reserved.</p>
+          <p>© {new Date().getFullYear()} {settings?.store_name ?? "Azlan Dairy Fast Food & B B Q point"}. All rights reserved.</p>
           <p>Farm to Table Premium · Karachi, Pakistan</p>
         </div>
       </div>

@@ -18,8 +18,8 @@ const plusJakarta = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "Azlan Dairy Restaurant",
-  description: "Farm to Table Premium - Azlan Dairy Restaurant, Karachi",
+  title: "Azlan Dairy Fast Food & B B Q point",
+  description: "Farm to Table Premium - Azlan Dairy Fast Food & B B Q point, Karachi",
   icons: {
     icon: [
       { url: "/images/logo.png", type: "image/png" }
@@ -51,6 +51,14 @@ export default async function RootLayout({
         <link
           rel="stylesheet"
           href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap"
+        />
+        <link
+          rel="stylesheet"
+          href="https://fonts.cdnfonts.com/css/jameel-noori-nastaliq"
+        />
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Noto+Nastaliq+Urdu:wght@400..700&display=swap"
         />
       </head>
       <body className="min-h-full flex flex-col">

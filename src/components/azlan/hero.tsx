@@ -26,7 +26,7 @@ export function Hero({ settings }: { settings: Settings | null }) {
       <div className="absolute inset-0 z-[1]"
         style={{
           background:
-            "linear-gradient(160deg, rgba(0,35,12,0.88) 0%, rgba(0,35,12,0.65) 50%, rgba(117,76,152,0.45) 100%)",
+            "linear-gradient(160deg, rgba(0,35,12,0.95) 0%, rgba(0,35,12,0.8) 100%)",
         }}
       />
 
@@ -59,23 +59,20 @@ export function Hero({ settings }: { settings: Settings | null }) {
 
         {/* ── OPEN / CLOSED STATUS BANNER ── */}
         <div
-          className={`inline-flex items-center gap-3 px-6 py-3 rounded-2xl font-extrabold text-base sm:text-lg backdrop-blur-sm shadow-lg ${
-            isOpen
+          className={`inline-flex items-center gap-3 px-6 py-3 rounded-2xl font-extrabold text-base sm:text-lg backdrop-blur-sm shadow-lg ${isOpen
               ? "bg-green-500/20 border-2 border-green-400/60 text-green-300"
               : "bg-red-600/20 border-2 border-red-400/60 text-red-300"
-          }`}
+            }`}
         >
           {/* Pulsing dot */}
           <span className="relative flex h-4 w-4 shrink-0">
             <span
-              className={`absolute inline-flex h-full w-full rounded-full opacity-75 ${
-                isOpen ? "bg-green-400 animate-ping" : "bg-red-400"
-              }`}
+              className={`absolute inline-flex h-full w-full rounded-full opacity-75 ${isOpen ? "bg-green-400 animate-ping" : "bg-red-400"
+                }`}
             />
             <span
-              className={`relative inline-flex h-4 w-4 rounded-full ${
-                isOpen ? "bg-green-400" : "bg-red-500"
-              }`}
+              className={`relative inline-flex h-4 w-4 rounded-full ${isOpen ? "bg-green-400" : "bg-red-500"
+                }`}
             />
           </span>
 
@@ -106,7 +103,7 @@ export function Hero({ settings }: { settings: Settings | null }) {
         <h1 className="text-4xl sm:text-6xl md:text-7xl font-extrabold tracking-tight-hero leading-[1.05]">
           <span className="text-white">Hot. Crispy.</span>
           <br />
-          <span className="shimmer-text">Delivered Fresh.</span>
+          <span className="text-[var(--color-mint-accent)]">Delivered Fresh.</span>
         </h1>
 
         {/* Supporting line */}
@@ -141,9 +138,9 @@ export function Hero({ settings }: { settings: Settings | null }) {
         {/* Trust badges */}
         <ul className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-8">
           {[
-            { icon: "lunch_dining", text: "100% Fresh Ingredients"    },
-            { icon: "bolt",         text: "Fast Delivery · Malir Only" },
-            { icon: "map",          text: "Live Order Tracking"         },
+            { icon: "lunch_dining", text: "100% Fresh Ingredients" },
+            { icon: "bolt", text: "Fast Delivery · Malir Only" },
+            { icon: "map", text: "Live Order Tracking" },
           ].map(({ icon, text }) => (
             <li
               key={text}

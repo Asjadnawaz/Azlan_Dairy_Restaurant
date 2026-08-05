@@ -346,20 +346,29 @@ export function CartDrawer({ isStoreActive }: CartDrawerProps) {
                     <span className="text-[var(--color-on-surface-variant)]">Subtotal</span>
                     <span className="font-semibold">Rs. {subtotal}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-[var(--color-on-surface-variant)]">Delivery</span>
-                    <span className="font-semibold">
-                      {deliveryLocation ? (
-                        <>
-                          Rs. {deliveryFee}
-                          <span className="text-xs text-[var(--color-on-surface-variant)] font-normal ml-1">
-                            ({deliveryDistance} km)
-                          </span>
-                        </>
-                      ) : (
-                        "Select location"
-                      )}
-                    </span>
+                  <div className="flex flex-col gap-0.5">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <span className="text-[var(--color-on-surface-variant)]">Delivery</span>
+                        {!deliveryLocation && (
+                          <p className="text-[11px] text-[var(--color-on-surface-variant)]/80 mt-0.5">
+                            Delivery charges will be calculated in the next step
+                          </p>
+                        )}
+                      </div>
+                      <span className="font-semibold shrink-0">
+                        {deliveryLocation ? (
+                          <>
+                            Rs. {deliveryFee}
+                            <span className="text-xs text-[var(--color-on-surface-variant)] font-normal ml-1">
+                              ({deliveryDistance} km)
+                            </span>
+                          </>
+                        ) : (
+                          "Rs. 60"
+                        )}
+                      </span>
+                    </div>
                   </div>
                   <div className="border-t border-[var(--color-outline-variant)] pt-2 flex justify-between">
                     <span className="font-bold">Total</span>
