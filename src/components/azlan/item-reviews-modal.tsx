@@ -112,7 +112,13 @@ export function ItemReviewsModal({ item, onClose }: ItemReviewsModalProps) {
         <div className="flex items-center justify-between pb-3 border-b border-[var(--color-outline-variant)]/60">
           <div className="flex items-center gap-3">
             <img
-              src={item.image_path || "/images/burger.jpg"}
+              src={
+                item.image_path
+                  ? item.image_path
+                      .replace("/images/Orignal_Images/", "/images/Webp_Orignal_images/")
+                      .replace(/\.(jpeg|jpg|png)$/i, ".webp")
+                  : "/images/burger.jpg"
+              }
               alt={item.name}
               className="w-12 h-12 rounded-xl object-cover border"
             />

@@ -43,7 +43,13 @@ export function ProductCard({ item, isStoreActive }: { item: Item; isStoreActive
       {/* Image */}
       <div className="relative aspect-[4/3] overflow-hidden">
         <img
-          src={item.image_path || "/images/burger.jpg"}
+          src={
+            item.image_path
+              ? item.image_path
+                  .replace("/images/Orignal_Images/", "/images/Webp_Orignal_images/")
+                  .replace(/\.(jpeg|jpg|png)$/i, ".webp")
+              : "/images/burger.jpg"
+          }
           alt={item.name}
           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
         />
