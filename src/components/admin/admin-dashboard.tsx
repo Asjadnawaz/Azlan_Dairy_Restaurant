@@ -5,6 +5,7 @@ import { createBrowserClient } from "@/lib/supabase/client";
 import type { Order, OrderItem, Settings, OrderStatus } from "@/lib/supabase/database.types";
 import { OrderCard } from "./order-card";
 import { StoreToggle } from "./store-toggle";
+import { toast } from "sonner";
 
 interface AdminDashboardProps {
   initialOrders: Order[];
@@ -25,8 +26,32 @@ export function AdminDashboard({
   const [lineItems, setLineItems] = useState<OrderItem[]>(initialLineItems);
   const [isActive, setIsActive] = useState(settings?.is_active ?? true);
   const [filter, setFilter] = useState<OrderStatus | "all">("all");
+  const [isClearing, setIsClearing] = useState(false);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const supabaseRef = useRef(createBrowserClient());
+
+  async function handleClearAllOrders() {
+    if (isClearing) return;
+    setIsClearing(true);
+    try {
+      const res = await fetch("/api/admin/orders", {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to clear orders");
+      }
+      setOrders([]);
+      setLineItems([]);
+      setShowClearConfirm(false);
+      toast.success("All orders cleared successfully!");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to clear orders");
+    } finally {
+      setIsClearing(false);
+    }
+  }
 
   // Play alert sound
   const playAlert = useCallback(() => {
@@ -102,6 +127,66 @@ export function AdminDashboard({
     };
   }, [playAlert]);
 
+  // Polling loop to fetch new orders every 4s via API route (bypasses RLS limits)
+  useEffect(() => {
+    let active = true;
+
+    async function pollOrders() {
+      try {
+        const res = await fetch("/api/admin/orders");
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!active) return;
+
+        if (Array.isArray(data.orders)) {
+          setOrders((prev) => {
+            const existingIds = new Set(prev.map((o) => o.id));
+            let hasNew = false;
+            const updatedList = [...prev];
+
+            for (const incoming of data.orders as Order[]) {
+              const idx = updatedList.findIndex((o) => o.id === incoming.id);
+              if (idx >= 0) {
+                // Update status if changed
+                if (updatedList[idx].status !== incoming.status) {
+                  updatedList[idx] = { ...updatedList[idx], ...incoming };
+                }
+              } else {
+                // Brand new order!
+                hasNew = true;
+                updatedList.unshift(incoming);
+              }
+            }
+
+            if (hasNew) {
+              playAlert();
+            }
+
+            return updatedList;
+          });
+        }
+
+        if (Array.isArray(data.lineItems)) {
+          setLineItems((prev) => {
+            const existingIds = new Set(prev.map((i) => i.id));
+            const fresh = (data.lineItems as OrderItem[]).filter(
+              (i) => !existingIds.has(i.id)
+            );
+            return fresh.length > 0 ? [...prev, ...fresh] : prev;
+          });
+        }
+      } catch (err) {
+        console.error("Failed polling admin orders:", err);
+      }
+    }
+
+    const interval = setInterval(pollOrders, 4000);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, [playAlert]);
+
   // Fetch line items for a new order (since INSERT on order_items may lag)
   const fetchLineItems = useCallback(async (orderId: string) => {
     const supabase = supabaseRef.current;
@@ -164,6 +249,19 @@ export function AdminDashboard({
           <div className="flex items-center gap-2 sm:gap-3">
             <StoreToggle isActive={isActive} onToggle={setIsActive} />
 
+            {/* Clear Orders Button */}
+            <button
+              onClick={() => setShowClearConfirm(true)}
+              disabled={orders.length === 0}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-bold transition-all border border-[var(--color-error)]/30 text-[var(--color-error)] hover:bg-[var(--color-error)]/10 disabled:opacity-40 disabled:cursor-not-allowed"
+              title="Delete all orders"
+            >
+              <span className="material-symbols-outlined text-[16px]">
+                delete_sweep
+              </span>
+              <span className="hidden md:inline">Clear Orders</span>
+            </button>
+
             {/* User badge */}
             <div className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-full bg-[var(--color-surface-container)]">
               <span className="w-7 h-7 rounded-full bg-[var(--color-primary)] text-white flex items-center justify-center text-xs font-bold uppercase">
@@ -179,6 +277,50 @@ export function AdminDashboard({
           </div>
         </div>
       </header>
+
+      {/* Confirmation Modal for Clearing Orders */}
+      {showClearConfirm && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-[var(--color-surface-container-lowest)] rounded-2xl max-w-md w-full p-6 shadow-2xl border border-[var(--color-outline-variant)]">
+            <div className="w-12 h-12 rounded-full bg-[var(--color-error)]/10 text-[var(--color-error)] flex items-center justify-center mb-4">
+              <span className="material-symbols-outlined text-2xl">
+                warning
+              </span>
+            </div>
+            <h3 className="text-xl font-extrabold text-[var(--color-on-surface)]">
+              Delete All Orders?
+            </h3>
+            <p className="text-sm text-[var(--color-on-surface-variant)] mt-2">
+              Are you sure you want to permanently delete all <strong>{orders.length}</strong> orders from the database? This action cannot be undone.
+            </p>
+            <div className="flex items-center justify-end gap-3 mt-6">
+              <button
+                onClick={() => setShowClearConfirm(false)}
+                disabled={isClearing}
+                className="px-4 py-2 rounded-full text-xs font-bold bg-[var(--color-surface-container)] text-[var(--color-on-surface)] hover:bg-[var(--color-surface-container-high)]"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleClearAllOrders}
+                disabled={isClearing}
+                className="px-4 py-2 rounded-full text-xs font-bold bg-[var(--color-error)] text-white hover:brightness-110 disabled:opacity-50 flex items-center gap-2"
+              >
+                {isClearing ? (
+                  <>
+                    <span className="animate-spin material-symbols-outlined text-[16px]">
+                      progress_activity
+                    </span>
+                    Deleting...
+                  </>
+                ) : (
+                  "Yes, Delete All"
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Stats bar */}
       <div className="mx-auto max-w-7xl px-4 md:px-8 py-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">

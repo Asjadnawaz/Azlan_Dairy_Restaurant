@@ -2,22 +2,20 @@
 
 export function AnnouncementBar() {
   const messages = [
-    "🏆 Malir's #1 Fast Food Destination",
-    "🍔 Crispy Zinger Burgers – Made Fresh Daily",
-    "🍕 Cheesy Hot Pizzas – Every Slice Counts",
-    "🌯 Loaded Rolls & Karahis – Bold & Flavourful",
-    "⚡ Fast Hot Delivery – Exclusively in Malir",
-    "🎯 Order Now & Get It at Your Door",
+    "🛵 Delivery Timings: 07:00 PM to 03:00 AM",
+    "⚡ Fast Hot Delivery Daily: 7:00 PM – 3:00 AM",
+    "⏰ Delivery Hours: 07:00 PM to 03:00 AM",
+    "🚀 Azlan Fast Food & BBQ Point – Delivery 7:00 PM to 3:00 AM",
   ];
   const repeated = [...messages, ...messages, ...messages, ...messages];
 
   return (
-    <div className="relative z-[60] overflow-hidden bg-[var(--color-primary)] text-white text-xs font-semibold tracking-wide py-1.5 select-none">
+    <div className="relative z-[60] overflow-hidden bg-[var(--color-primary)] text-white text-xs font-bold tracking-wider py-2 select-none border-b border-emerald-900/40">
       <div className="flex animate-marquee whitespace-nowrap">
         {repeated.map((msg, i) => (
-          <span key={i} className="mx-8 inline-flex items-center gap-1.5">
-            {msg}
-            <span className="text-[var(--color-cta-yellow)] mx-2">·</span>
+          <span key={i} className="mx-8 inline-flex items-center gap-2">
+            <span>{msg}</span>
+            <span className="text-[var(--color-cta-yellow)] mx-2 font-black">·</span>
           </span>
         ))}
       </div>

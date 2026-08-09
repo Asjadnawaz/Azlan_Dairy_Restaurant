@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import { LoginForm } from "@/components/admin/login-form";
 
 export const metadata = {
-  title: "Admin Login — Azlan Dairy",
+  title: "Admin Login — Azlan Fast Food and B B Q point",
 };
 
 export default function AdminLoginPage() {
@@ -17,13 +17,13 @@ export default function AdminLoginPage() {
         <div className="text-center mb-8">
           <img
             src="/images/logo.png"
-            alt="Azlan Dairy Restaurant logo"
+            alt="Azlan Fast Food and B B Q point logo"
             width={72}
             height={72}
             className="mx-auto h-[72px] w-[72px] rounded-full object-cover ring-2 ring-[var(--color-mint-accent)]/40 mb-3"
           />
           <h1 className="text-2xl font-extrabold tracking-tight text-white">
-            Azlan Dairy Restaurant
+            Azlan Fast Food and B B Q point
           </h1>
           <p className="mt-1 text-sm text-white/60">Admin Dashboard</p>
         </div>

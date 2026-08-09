@@ -2,13 +2,11 @@ import type { Metadata } from "next";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import { ThemeProvider } from "@/components/azlan/theme-provider";
 import { Toaster } from "sonner";
-import { StoreClosedBanner } from "@/components/azlan/store-closed-banner";
-import { AnnouncementBar } from "@/components/azlan/announcement-bar";
-import { Header } from "@/components/azlan/header";
-import { FloatingButtons } from "@/components/azlan/floating-buttons";
-import { CartDrawer } from "@/components/azlan/cart-drawer";
+import { LayoutChrome } from "@/components/azlan/layout-chrome";
 import { createServerClient } from "@/lib/supabase/server";
 import "./globals.css";
+
+import { InitialLoader } from "@/components/azlan/initial-loader";
 
 const plusJakarta = Plus_Jakarta_Sans({
   variable: "--font-jakarta",
@@ -18,8 +16,8 @@ const plusJakarta = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "Azlan Dairy Fast Food & B B Q point",
-  description: "Farm to Table Premium - Azlan Dairy Fast Food & B B Q point, Karachi",
+  title: "Azlan Fast Food and B B Q point",
+  description: "Farm to Table Premium - Azlan Fast Food and B B Q point, Karachi",
   icons: {
     icon: [
       { url: "/images/logo.png", type: "image/png" }
@@ -54,6 +52,10 @@ export default async function RootLayout({
         />
         <link
           rel="stylesheet"
+          href="https://fonts.cdnfonts.com/css/integral-cf"
+        />
+        <link
+          rel="stylesheet"
           href="https://fonts.cdnfonts.com/css/jameel-noori-nastaliq"
         />
         <link
@@ -62,16 +64,13 @@ export default async function RootLayout({
         />
       </head>
       <body className="min-h-full flex flex-col">
+        <InitialLoader />
         <ThemeProvider
           attribute="class"
           defaultTheme="light"
           enableSystem={false}
         >
-          <StoreClosedBanner isActive={isStoreActive} />
-          <AnnouncementBar />
-          <Header />
-          <CartDrawer isStoreActive={isStoreActive} />
-          <FloatingButtons />
+          <LayoutChrome isStoreActive={isStoreActive} />
           <main className="flex-1">{children}</main>
           <Toaster position="bottom-right" richColors />
         </ThemeProvider>

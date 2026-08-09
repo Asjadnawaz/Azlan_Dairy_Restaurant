@@ -8,6 +8,7 @@ export function SignOutButton() {
   const router = useRouter();
 
   async function handleSignOut() {
+    document.cookie = "admin_auth=; path=/; max-age=0";
     const supabase = createBrowserClient();
     await supabase.auth.signOut();
     toast.success("Signed out");

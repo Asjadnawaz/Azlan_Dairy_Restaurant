@@ -1,7 +1,63 @@
 "use client";
 
+import { useState, useEffect, useCallback } from "react";
+import { createBrowserClient } from "@/lib/supabase/client";
+import type { Settings } from "@/lib/supabase/database.types";
+
 export function StoreClosedBanner({ isActive }: { isActive: boolean }) {
-  if (isActive) return null;
+  const [storeActive, setStoreActive] = useState<boolean>(isActive);
+
+  useEffect(() => {
+    setStoreActive(isActive);
+  }, [isActive]);
+
+  // Fetch current status directly from DB
+  const fetchStatus = useCallback(async () => {
+    try {
+      const supabase = createBrowserClient();
+      const { data } = await supabase
+        .from("settings")
+        .select("is_active")
+        .eq("id", 1)
+        .single();
+      if (data && typeof data.is_active === "boolean") {
+        setStoreActive(data.is_active);
+      }
+    } catch {
+      // Silent fallback
+    }
+  }, []);
+
+  useEffect(() => {
+    // Fetch fresh status on mount
+    fetchStatus();
+
+    // Subscribe to Realtime changes
+    const supabase = createBrowserClient();
+    const channel = supabase
+      .channel("banner-store-status")
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "settings" },
+        (payload) => {
+          const updated = payload.new as Settings;
+          if (updated && typeof updated.is_active === "boolean") {
+            setStoreActive(updated.is_active);
+          }
+        }
+      )
+      .subscribe();
+
+    // Polling fallback every 30s
+    const interval = setInterval(fetchStatus, 30_000);
+
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(interval);
+    };
+  }, [fetchStatus]);
+
+  if (storeActive) return null;
 
   return (
     <div

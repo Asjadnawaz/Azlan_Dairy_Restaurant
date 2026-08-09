@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { createBrowserClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 
 export function StoreToggle({
@@ -12,7 +11,6 @@ export function StoreToggle({
   onToggle: (v: boolean) => void;
 }) {
   const [updating, setUpdating] = useState(false);
-  const supabase = createBrowserClient();
 
   async function toggle() {
     if (updating) return;
@@ -20,18 +18,26 @@ export function StoreToggle({
     const newValue = !isActive;
     onToggle(newValue);
 
-    const { error } = await supabase
-      .from("settings")
-      .update({ is_active: newValue, updated_at: new Date().toISOString() })
-      .eq("id", 1);
+    try {
+      const res = await fetch("/api/admin/toggle-store", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_active: newValue }),
+      });
 
-    if (error) {
-      onToggle(!newValue);
-      toast.error("Failed to update store status");
-    } else {
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to update store status");
+      }
+
       toast.success(newValue ? "Store is now OPEN" : "Store is now CLOSED");
+    } catch (err: any) {
+      onToggle(!newValue);
+      toast.error(err.message || "Failed to update store status");
+    } finally {
+      setUpdating(false);
     }
-    setUpdating(false);
   }
 
   return (

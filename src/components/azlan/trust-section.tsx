@@ -49,7 +49,7 @@ export function TrustSection() {
       <div className="relative mx-auto max-w-7xl px-4 md:px-8 py-10 md:py-14">
         {/* Section label */}
         <p className="text-center text-[10px] sm:text-xs font-bold uppercase tracking-[0.3em] text-[var(--color-mint-accent)] mb-8 opacity-80">
-          Why Choose Azlan Dairy Restaurant
+          Why Choose Azlan Fast Food and B B Q point
         </p>
 
         {/* Badges grid */}

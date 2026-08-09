@@ -1,11 +1,12 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextRequest, NextResponse } from "next/server";
+import { isAdminUser } from "@/lib/admin";
 
 /**
  * Proxy (Next.js 16 — formerly "Middleware"):
  * 1. Refreshes the Supabase auth session on every request (handles token expiry).
  * 2. Protects /admin/* routes (except /admin/login) — redirects to /admin/login
- *    if no authenticated user.
+ *    if no authenticated admin user.
  */
 export async function proxy(request: NextRequest) {
   const response = NextResponse.next({
@@ -32,7 +33,7 @@ export async function proxy(request: NextRequest) {
     }
   );
 
-  // Refresh session tokens (no redirect — just ensure cookies are current)
+  // Refresh session tokens
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -42,15 +43,16 @@ export async function proxy(request: NextRequest) {
   // Protect /admin routes (except the login page itself)
   const isAdminRoute = pathname.startsWith("/admin");
   const isLoginRoute = pathname === "/admin/login";
+  const adminAuthCookie = request.cookies.get("admin_auth")?.value === "true";
+  const isUserAdmin = isAdminUser(user) || adminAuthCookie;
 
-  if (isAdminRoute && !isLoginRoute && !user) {
-    const loginUrl = new URL("/admin/login", request.url);
-    loginUrl.searchParams.set("redirect", pathname);
-    return NextResponse.redirect(loginUrl);
+  if (isAdminRoute && !isLoginRoute && !isUserAdmin) {
+    // Non-admin users (authenticated or not) are silently redirected to home
+    return NextResponse.redirect(new URL("/", request.url));
   }
 
-  // If already logged in and visiting login page, redirect to dashboard
-  if (isLoginRoute && user) {
+  // If logged in as admin and visiting login page, redirect to dashboard
+  if (isLoginRoute && isUserAdmin) {
     return NextResponse.redirect(new URL("/admin/orders", request.url));
   }
 

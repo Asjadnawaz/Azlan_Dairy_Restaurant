@@ -1,7 +1,45 @@
 @import "tailwindcss";
 
+@font-face {
+  font-family: 'Integral CF Bold';
+  src: url('/fonts/Demo_Fonts/Fontspring-DEMO-integralcf-bold.otf') format('opentype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Integral CF Bold';
+  src: url('/fonts/Demo_Fonts/Fontspring-DEMO-integralcf-boldoblique.otf') format('opentype');
+  font-weight: 700;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Integral CF Local';
+  src: url('/fonts/Demo_Fonts/Fontspring-DEMO-integralcf-bold.otf') format('opentype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Integral CF Local';
+  src: url('/fonts/Demo_Fonts/Fontspring-DEMO-integralcf-boldoblique.otf') format('opentype');
+  font-weight: 700;
+  font-style: italic;
+  font-display: swap;
+}
+
 .font-nastaliq {
   font-family: 'Jameel Noori Nastaliq', 'Noto Nastaliq Urdu', 'Urdu Typesetting', serif;
+}
+
+.font-integral {
+  font-family: 'Integral CF Bold', 'Integral CF Local', sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.01em;
 }
 
 @theme inline {
@@ -9,13 +47,19 @@
   --font-jakarta: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
 
   /* Brand tokens (Azlan Dairy Farm-to-Table Premium) */
-  --color-primary: #00230c; /* Deep Green */
+  --color-primary: #00230c;
+  /* Deep Green */
   --color-on-primary: #ffffff;
-  --color-secondary-brand: #754c98; /* Royal Purple */
-  --color-mint-accent: #a3d2a9; /* Mint Accent */
-  --color-cta-yellow: #FED835; /* Sunny Yellow for CTAs */
-  --color-tertiary: #001e3d; /* Vivid Blue */
-  --color-background: #f4f9f6; /* Soft Mint background */
+  --color-secondary-brand: #361170;
+  /* Royal Purple */
+  --color-mint-accent: #a3d2a9;
+  /* Mint Accent */
+  --color-cta-yellow: #FED835;
+  /* Sunny Yellow for CTAs */
+  --color-tertiary: #001e3d;
+  /* Vivid Blue */
+  --color-background: #f4f9f6;
+  /* Soft Mint background */
   --color-on-surface: #1a1c19;
   --color-on-surface-variant: #414941;
   --color-surface-container-lowest: #ffffff;
@@ -128,6 +172,7 @@ body {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
@@ -136,14 +181,17 @@ body {
   scrollbar-width: thin;
   scrollbar-color: rgba(0, 35, 12, 0.2) transparent;
 }
+
 .slim-scrollbar::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
+
 .slim-scrollbar::-webkit-scrollbar-thumb {
   background: rgba(0, 35, 12, 0.2);
   border-radius: 3px;
 }
+
 .slim-scrollbar::-webkit-scrollbar-track {
   background: transparent;
 }
@@ -205,12 +253,10 @@ body {
    ========================================= */
 
 .shimmer-text {
-  background: linear-gradient(
-    90deg,
-    var(--color-mint-accent) 0%,
-    #ffffff 50%,
-    var(--color-mint-accent) 100%
-  );
+  background: linear-gradient(90deg,
+      var(--color-mint-accent) 0%,
+      #ffffff 50%,
+      var(--color-mint-accent) 100%);
   background-size: 200% 100%;
   -webkit-background-clip: text;
   background-clip: text;
@@ -271,19 +317,15 @@ body {
    ========================================= */
 
 .bg-dots {
-  background-image: radial-gradient(
-    circle,
-    rgba(0, 35, 12, 0.08) 1px,
-    transparent 1px
-  );
+  background-image: radial-gradient(circle,
+      rgba(0, 35, 12, 0.08) 1px,
+      transparent 1px);
   background-size: 20px 20px;
 }
 
 .bg-grid {
-  background-image: linear-gradient(
-      rgba(0, 35, 12, 0.05) 1px,
-      transparent 1px
-    ),
+  background-image: linear-gradient(rgba(0, 35, 12, 0.05) 1px,
+      transparent 1px),
     linear-gradient(90deg, rgba(0, 35, 12, 0.05) 1px, transparent 1px);
   background-size: 40px 40px;
 }
@@ -296,22 +338,27 @@ body {
   from {
     transform: scale(1);
   }
+
   to {
     transform: scale(1.08);
   }
 }
 
 @keyframes floatGlow {
+
   0%,
   100% {
     transform: translate(0, 0);
   }
+
   25% {
     transform: translate(20px, -30px);
   }
+
   50% {
     transform: translate(-10px, -15px);
   }
+
   75% {
     transform: translate(-25px, 20px);
   }
@@ -322,12 +369,15 @@ body {
     transform: translateY(0) translateX(0);
     opacity: 0;
   }
+
   10% {
     opacity: 1;
   }
+
   90% {
     opacity: 1;
   }
+
   100% {
     transform: translateY(-100vh) translateX(30px);
     opacity: 0;
@@ -335,10 +385,12 @@ body {
 }
 
 @keyframes bounceY {
+
   0%,
   100% {
     transform: translateY(0);
   }
+
   50% {
     transform: translateY(-8px);
   }
@@ -348,6 +400,7 @@ body {
   0% {
     transform: translateX(0);
   }
+
   100% {
     transform: translateX(-50%);
   }
@@ -357,6 +410,7 @@ body {
   0% {
     transform: translateX(-50%);
   }
+
   100% {
     transform: translateX(0%);
   }
@@ -367,6 +421,7 @@ body {
     opacity: 0;
     transform: translateY(24px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -374,10 +429,12 @@ body {
 }
 
 @keyframes softPulse {
+
   0%,
   100% {
     box-shadow: 0 0 0 0 rgba(37, 211, 102, 0.4);
   }
+
   50% {
     box-shadow: 0 0 0 8px rgba(37, 211, 102, 0);
   }
@@ -387,6 +444,7 @@ body {
   0% {
     background-position: -200% 0;
   }
+
   100% {
     background-position: 200% 0;
   }
@@ -397,6 +455,7 @@ body {
     opacity: 0;
     transform: scale(0.92);
   }
+
   to {
     opacity: 1;
     transform: scale(1);
@@ -407,6 +466,7 @@ body {
   from {
     opacity: 0;
   }
+
   to {
     opacity: 1;
   }
@@ -417,6 +477,7 @@ body {
     opacity: 0;
     transform: scale(0.95);
   }
+
   to {
     opacity: 1;
     transform: scale(1);
@@ -428,9 +489,22 @@ body {
     opacity: 0;
     transform: translateY(100%);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes slideLeft {
+  from {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
   }
 }
 
@@ -438,16 +512,19 @@ body {
   0% {
     background-position: -200% 0;
   }
+
   100% {
     background-position: 200% 0;
   }
 }
 
 @keyframes floatY {
+
   0%,
   100% {
     transform: translateY(0);
   }
+
   50% {
     transform: translateY(-12px);
   }
@@ -457,16 +534,19 @@ body {
   from {
     transform: rotate(0deg);
   }
+
   to {
     transform: rotate(360deg);
   }
 }
 
 @keyframes glowPulse {
+
   0%,
   100% {
     opacity: 0.2;
   }
+
   50% {
     opacity: 0.5;
   }
@@ -508,6 +588,10 @@ body {
   animation: slideUp 0.4s ease-out forwards;
 }
 
+.animate-slide-left {
+  animation: slideLeft 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
 .animate-float {
   animation: floatY 3s ease-in-out infinite;
 }
@@ -525,13 +609,91 @@ body {
    ========================================= */
 
 .skeleton {
-  background: linear-gradient(
-    90deg,
-    var(--color-surface-container) 25%,
-    var(--color-surface-container-high) 50%,
-    var(--color-surface-container) 75%
-  );
+  background: linear-gradient(90deg,
+      var(--color-surface-container) 25%,
+      var(--color-surface-container-high) 50%,
+      var(--color-surface-container) 75%);
   background-size: 200% 100%;
   animation: skelShimmer 1.5s ease-in-out infinite;
   border-radius: var(--radius-md);
+}
+
+/* =========================================
+   Animated Add to Cart Button effect
+   ========================================= */
+
+.cart-btn-wrapper {
+  position: relative;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  margin-top: 0.75rem;
+}
+
+.cart-btn-animated {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  height: 42px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background: var(--color-primary);
+  color: #ffffff;
+  border: 2px solid var(--color-primary);
+  border-radius: 9999px;
+  transition: all 0.35s ease-in-out;
+  z-index: 2;
+  font-size: 0.82rem;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 35, 12, 0.12);
+}
+
+.cart-btn-animated.added-state {
+  background: var(--color-success) !important;
+  border-color: var(--color-success) !important;
+  color: #ffffff !important;
+}
+
+.cart-btn-icon {
+  width: 38px;
+  height: 38px;
+  border: 2px solid transparent;
+  position: absolute;
+  transform: rotate(45deg);
+  right: 4px;
+  top: 2px;
+  z-index: 1;
+  border-radius: 8px;
+  transition: all 0.35s ease-in-out;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.cart-btn-icon svg {
+  width: 18px;
+  height: 18px;
+  transform: rotate(-45deg);
+  transition: all 0.35s ease-in-out;
+  fill: var(--color-primary);
+}
+
+.cart-btn-wrapper:hover .cart-btn-animated:not(:disabled) {
+  width: calc(100% - 36px);
+  border-color: var(--color-primary);
+  background: transparent;
+  color: var(--color-primary);
+}
+
+.cart-btn-wrapper:hover .cart-btn-icon {
+  border-color: var(--color-primary);
+  right: 0px;
+  opacity: 1;
+  background: var(--color-surface-container-lowest);
 }

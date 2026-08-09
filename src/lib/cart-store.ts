@@ -13,6 +13,8 @@ export type CartState = {
   items: CartItem[];
   isOpen: boolean;
   step: "cart" | "checkout";
+  _hasHydrated: boolean;
+  setHasHydrated: (v: boolean) => void;
   add: (item: Omit<CartItem, "quantity">, quantity?: number) => void;
   remove: (id: string) => void;
   updateQty: (id: string, delta: number) => void;
@@ -32,6 +34,8 @@ export const useCart = create<CartState>()(
       items: [],
       isOpen: false,
       step: "cart",
+      _hasHydrated: false,
+      setHasHydrated: (v: boolean) => set({ _hasHydrated: v }),
 
       add: (item, quantity = 1) => {
         const existing = get().items.find((i) => i.id === item.id);
@@ -100,6 +104,9 @@ export const useCart = create<CartState>()(
       name: "azlan-dairy-cart",
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({ items: state.items }),
+      onRehydrateStorage: () => (state) => {
+        state?.setHasHydrated(true);
+      },
     }
   )
 );

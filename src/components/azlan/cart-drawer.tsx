@@ -52,6 +52,7 @@ export function CartDrawer({ isStoreActive }: CartDrawerProps) {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<"cod" | "online">("cod");
+  const [itemUnavailableAction, setItemUnavailableAction] = useState<"Call me" | "Cancel entire order">("Call me");
 
   // Save order to localStorage after successful placement
   const saveOrderToStorage = (
@@ -70,16 +71,37 @@ export function CartDrawer({ isStoreActive }: CartDrawerProps) {
   useEffect(() => {
     setMounted(true);
     // Check for existing auth session
-    getCurrentUser().then((user) => {
-      if (user) setUserId(user.id);
-    }).catch(() => {
-      // No user logged in, that's fine
-    });
+    const prefillUser = (u: any) => {
+      if (!u) return;
+      setUserId(u.id);
+      
+      const meta = u.user_metadata || {};
+      setForm((prev) => {
+        let newName = prev.name;
+        if (!newName) {
+          if (meta.full_name) {
+            newName = meta.full_name;
+          } else if (meta.first_name) {
+            newName = meta.last_name ? `${meta.first_name} ${meta.last_name}` : meta.first_name;
+          }
+        }
+        
+        let newPhone = prev.phone;
+        if (newPhone === "03" && meta.phone) {
+          newPhone = meta.phone;
+        }
+        
+        return { ...prev, name: newName, phone: newPhone };
+      });
+    };
 
-    // Listen to auth state changes to update userId
+    getCurrentUser().then((user) => {
+      if (user) prefillUser(user);
+    }).catch(() => { });
+
     const subscription = onAuthStateChange((event, session) => {
       if (event === 'SIGNED_IN' && session?.user) {
-        setUserId(session.user.id);
+        prefillUser(session.user);
       } else if (event === 'SIGNED_OUT') {
         setUserId(null);
       }
@@ -133,6 +155,11 @@ export function CartDrawer({ isStoreActive }: CartDrawerProps) {
   async function handleSubmit() {
     if (!valid || submitting) return;
 
+    if (!isStoreActive) {
+      toast.error("Store Closed. Please Try Again Later.");
+      return;
+    }
+
     // Check for authentication
     if (!userId) {
       setShowAuthModal(true);
@@ -158,7 +185,9 @@ export function CartDrawer({ isStoreActive }: CartDrawerProps) {
           customer_name: form.name,
           customer_phone: form.phone,
           customer_address: form.address,
-          customer_note: form.note,
+          customer_note: form.note
+            ? `[If unavailable: ${itemUnavailableAction}] ${form.note}`
+            : `[If unavailable: ${itemUnavailableAction}]`,
           items: items.map((i) => ({
             id: i.id,
             name: i.name,
@@ -177,7 +206,8 @@ export function CartDrawer({ isStoreActive }: CartDrawerProps) {
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.error || "Failed to place order");
+        toast.error(data.error || "Failed to place order. Please try again.");
+        return;
       }
 
       // 2. Capture details for the confirmation modal BEFORE clearing the cart
@@ -212,7 +242,7 @@ export function CartDrawer({ isStoreActive }: CartDrawerProps) {
       toast.success(`Order ${orderNumber} placed successfully!`);
     } catch (err) {
       console.error("Order submission failed:", err);
-      toast.error(err instanceof Error ? err.message : "Failed to place order");
+      toast.error("Failed to place order. Please check your connection and try again.");
     } finally {
       setSubmitting(false);
     }
@@ -460,6 +490,9 @@ export function CartDrawer({ isStoreActive }: CartDrawerProps) {
                   className="w-full h-11 rounded-[var(--radius-md)] bg-[var(--color-surface-container)] border border-[var(--color-outline-variant)] px-4 text-sm focus:outline-none focus:border-[var(--color-primary)]/40 focus:ring-2 focus:ring-[var(--color-primary)]/10 transition-all font-medium"
                 />
               </div>
+              <p className="text-xs text-slate-500 font-medium px-2 -mt-2">
+                Please edit your profile so that you don't need to enter your personal details again and again.
+              </p>
               <div>
                 <label className="block text-sm font-semibold mb-1.5">Delivery Address *</label>
                 <textarea
@@ -509,6 +542,26 @@ export function CartDrawer({ isStoreActive }: CartDrawerProps) {
                   </div>
                   <div className="w-5 h-5 rounded-full bg-[var(--color-primary)] text-white flex items-center justify-center shrink-0">
                     <span className="material-symbols-outlined text-[14px] font-bold">check</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Unavailable Item Preference */}
+              <div className="pt-2">
+                <label className="block text-sm font-semibold mb-1.5">
+                  If an item is unavailable, how should we proceed?
+                </label>
+                <div className="relative">
+                  <select
+                    value={itemUnavailableAction}
+                    onChange={(e) => setItemUnavailableAction(e.target.value as "Call me" | "Cancel entire order")}
+                    className="w-full h-11 rounded-[var(--radius-md)] bg-[var(--color-surface-container)] border border-[var(--color-outline-variant)] px-4 text-sm font-medium focus:outline-none focus:border-[var(--color-primary)]/40 focus:ring-2 focus:ring-[var(--color-primary)]/10 transition-all cursor-pointer appearance-none pr-10 text-[var(--color-on-surface)]"
+                  >
+                    <option value="Call me">Call me</option>
+                    <option value="Cancel entire order">Cancel entire order</option>
+                  </select>
+                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-[var(--color-on-surface-variant)]">
+                    <span className="material-symbols-outlined text-[20px]">expand_more</span>
                   </div>
                 </div>
               </div>

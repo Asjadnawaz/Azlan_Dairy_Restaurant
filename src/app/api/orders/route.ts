@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { Resend } from "resend";
+import { generateOrderConfirmationEmail } from "@/lib/email/order-confirmation";
 
 interface OrderLineItem {
   id: string;
@@ -27,14 +30,6 @@ export async function POST(req: NextRequest) {
   try {
     const body = (await req.json()) as CreateOrderBody;
 
-    // Debug log to check incoming delivery data
-    console.log("📍 API - Received order data:", {
-      delivery_fee: body.delivery_fee,
-      delivery_distance_km: body.delivery_distance_km,
-      delivery_coordinates: body.delivery_coordinates,
-      hasCoordinates: body.delivery_coordinates !== null && body.delivery_coordinates !== undefined,
-    });
-
     // Server-side validation
     const name = body.customer_name?.trim();
     const phone = body.customer_phone?.trim();
@@ -59,92 +54,136 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Get authenticated user (for email + user_id linking)
     const supabase = await createServerClient();
-
-    // Get authenticated user
     const { data: { user } } = await supabase.auth.getUser();
 
+    // Use admin client (bypasses RLS) for all database operations
+    const admin = createAdminClient();
+
     // Verify store is active (kill-switch)
-    const { data: settings } = await supabase
+    const { data: settings } = await admin
       .from("settings")
       .select("is_active")
+      .eq("id", 1)
       .single();
+
     if (settings && !settings.is_active) {
       return NextResponse.json(
-        { error: "Store is currently closed" },
+        { error: "Store Closed. Please Try Again Later." },
         { status: 403 }
       );
     }
 
-    // Delegate order + line items creation to the SECURITY DEFINER RPC.
-    // The RPC runs as the table owner (bypassing RLS), performs server-side
-    // validation, and inserts the order + items atomically in one transaction.
-    const { data: result, error: rpcError } = await supabase.rpc(
-      "create_order",
-      {
-        p_customer_name: name,
-        p_customer_phone: phone,
-        p_customer_address: address,
-        p_customer_note: body.customer_note?.trim() || null,
-        p_subtotal: body.subtotal,
-        p_total: body.total,
-        p_items: body.items.map((item) => ({
-          id: item.id,
-          name: item.name,
-          price: item.price,
-          quantity: item.quantity,
-        })),
-      }
-    );
+    // Generate order number: AD-XXXX
+    const { data: lastOrder } = await admin
+      .from("orders")
+      .select("order_number")
+      .order("placed_at", { ascending: false })
+      .limit(1)
+      .single();
 
-    if (rpcError) {
-      console.error("create_order RPC error:", rpcError);
+    let nextNum = 1001;
+    if (lastOrder?.order_number) {
+      const match = lastOrder.order_number.match(/AD-(\d+)/);
+      if (match) {
+        nextNum = parseInt(match[1], 10) + 1;
+      }
+    }
+    const orderNumber = `AD-${nextNum}`;
+
+    // Insert order
+    const orderInsert: Record<string, unknown> = {
+      order_number: orderNumber,
+      customer_name: name,
+      customer_phone: phone,
+      customer_address: address,
+      customer_note: body.customer_note?.trim() || null,
+      subtotal: body.subtotal,
+      total: body.total,
+      delivery_fee: body.delivery_fee,
+      delivery_distance_km: body.delivery_distance_km ?? null,
+      delivery_coordinates: body.delivery_coordinates ?? null,
+      status: "pending",
+      source: "website",
+      placed_at: new Date().toISOString(),
+    };
+
+    if (user?.id) {
+      orderInsert.user_id = user.id;
+    }
+
+    const { data: order, error: orderError } = await admin
+      .from("orders")
+      .insert(orderInsert)
+      .select("id, order_number")
+      .single();
+
+    if (orderError || !order) {
+      console.error("Failed to insert order:", orderError);
       return NextResponse.json(
-        { error: "Failed to create order", detail: rpcError.message },
+        { error: "Failed to place order. Please try again.", detail: orderError?.message },
         { status: 500 }
       );
     }
 
-    // RPC returns { success, order_id, order_number } or { success, error }
-    const rpcResult = result as
-      | { success: boolean; order_id?: string; order_number?: string; error?: string };
+    // Insert order line items
+    const lineItems = body.items.map((item) => ({
+      order_id: order.id,
+      item_id: item.id,
+      name_snapshot: item.name,
+      price_snapshot: item.price,
+      quantity: item.quantity,
+      line_total: item.price * item.quantity,
+    }));
 
-    if (!rpcResult?.success) {
-      console.error("create_order RPC returned failure:", rpcResult?.error);
-      return NextResponse.json(
-        { error: "Failed to create order", detail: rpcResult?.error },
-        { status: 400 }
-      );
+    const { error: itemsError } = await admin
+      .from("order_items")
+      .insert(lineItems);
+
+    if (itemsError) {
+      console.error("Failed to insert order items:", itemsError);
+      // Order was created but items failed — log but don't fail the response
+      // since the order ID is already generated
     }
 
-    // Update order with delivery and user information
-    const orderId = rpcResult.order_id;
+    // --- Send Order Confirmation Email ---
+    // Fire-and-forget: we don't block the response on email delivery.
+    const customerEmail = user?.email;
+    if (customerEmail && order.id && order.order_number && process.env.RESEND_API_KEY) {
+      const resend = new Resend(process.env.RESEND_API_KEY);
+      const emailHtml = generateOrderConfirmationEmail({
+        customerName: name,
+        orderNumber: order.order_number,
+        orderId: order.id,
+        items: body.items,
+        subtotal: body.subtotal,
+        deliveryFee: body.delivery_fee,
+        total: body.total,
+        deliveryAddress: address,
+        customerPhone: phone,
+        orderNote: body.customer_note,
+      });
 
-    // Update with delivery and auth information
-    const updateData: any = {
-      delivery_distance_km: body.delivery_distance_km,
-      delivery_coordinates: body.delivery_coordinates,
-      delivery_fee: body.delivery_fee,
-    };
-
-    if (user?.id) {
-      updateData.user_id = user.id;
+      resend.emails
+        .send({
+          from: "Azlan Fast Food <onboarding@resend.dev>",
+          to: customerEmail,
+          subject: `✅ Order Confirmed: ${order.order_number} – Azlan Fast Food`,
+          html: emailHtml,
+        })
+        .then(({ error }) => {
+          if (error) console.error("Resend email error:", error);
+          else console.log(`📧 Confirmation email sent to ${customerEmail} for order ${order.order_number}`);
+        })
+        .catch((err: unknown) => console.error("Email send exception:", err));
     }
-
-    const { error: updateError } = await supabase
-      .from("orders")
-      .update(updateData)
-      .eq("id", orderId);
-
-    if (updateError) {
-      console.error("Failed to update order with delivery info:", updateError);
-      // Don't fail the order, just log the error
-    }
+    // ----------------------------------------
 
     return NextResponse.json({
       success: true,
-      order_id: rpcResult.order_id,
-      order_number: rpcResult.order_number,
+      order_id: order.id,
+      order_number: order.order_number,
     });
   } catch (err) {
     console.error("Create order exception:", err);

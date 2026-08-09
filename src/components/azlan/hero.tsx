@@ -1,21 +1,68 @@
 "use client";
 
+import { useState, useEffect, useCallback } from "react";
+import { createBrowserClient } from "@/lib/supabase/client";
 import type { Settings } from "@/lib/supabase/database.types";
 
-// Check if current time (Karachi UTC+5) is within restaurant hours: 7 PM – 3 AM
-function isWithinBusinessHours(): boolean {
-  const now = new Date();
-  const karachi = new Date(
-    now.toLocaleString("en-US", { timeZone: "Asia/Karachi" })
-  );
-  const hour = karachi.getHours();
-  return hour >= 19 || hour < 3;
-}
-
 export function Hero({ settings }: { settings: Settings | null }) {
-  const isTimeBasedOpen = isWithinBusinessHours();
-  const isKillSwitchActive = settings?.is_active ?? true;
-  const isOpen = isKillSwitchActive && isTimeBasedOpen;
+  const [isStoreActive, setIsStoreActive] = useState<boolean>(
+    settings?.is_active ?? true
+  );
+
+  // Sync with server-provided prop
+  useEffect(() => {
+    if (settings?.is_active !== undefined) {
+      setIsStoreActive(settings.is_active);
+    }
+  }, [settings?.is_active]);
+
+  // Fetch current status directly from DB (fallback for initial load & cache staleness)
+  const fetchStatus = useCallback(async () => {
+    try {
+      const supabase = createBrowserClient();
+      const { data } = await supabase
+        .from("settings")
+        .select("is_active")
+        .eq("id", 1)
+        .single();
+      if (data && typeof data.is_active === "boolean") {
+        setIsStoreActive(data.is_active);
+      }
+    } catch {
+      // Silent fallback — keep last known state
+    }
+  }, []);
+
+  useEffect(() => {
+    // Fetch fresh status on mount
+    fetchStatus();
+
+    // Subscribe to Realtime changes for instant updates
+    const supabase = createBrowserClient();
+    const channel = supabase
+      .channel("hero-store-status")
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "settings" },
+        (payload) => {
+          const updated = payload.new as Settings;
+          if (updated && typeof updated.is_active === "boolean") {
+            setIsStoreActive(updated.is_active);
+          }
+        }
+      )
+      .subscribe();
+
+    // Polling fallback every 30s in case Realtime is not enabled on the table
+    const interval = setInterval(fetchStatus, 30_000);
+
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(interval);
+    };
+  }, [fetchStatus]);
+
+  const isOpen = isStoreActive;
 
   return (
     <section className="hero-section text-white flex items-center">
@@ -55,7 +102,7 @@ export function Hero({ settings }: { settings: Settings | null }) {
       ))}
 
       {/* Main content */}
-      <div className="relative z-10 mx-auto max-w-4xl w-full px-4 md:px-8 py-24 md:py-40 flex flex-col items-center text-center gap-6">
+      <div className="relative z-10 mx-auto max-w-4xl w-full px-4 md:px-8 py-24 md:pb-40 flex flex-col items-center text-center gap-6">
 
         {/* ── OPEN / CLOSED STATUS BANNER ── */}
         <div

@@ -59,7 +59,7 @@ export function AboutSection() {
               </span>
             </h2>
             <p className="text-base md:text-lg text-[var(--color-on-surface-variant)] leading-relaxed">
-              Azlan Dairy Restaurant started with a simple belief: the people of
+              Azlan Fast Food and B B Q point started with a simple belief: the people of
               Malir deserve <strong className="text-[var(--color-primary)]">world-class fast food</strong> made
               with real, fresh ingredients — without compromise.
             </p>

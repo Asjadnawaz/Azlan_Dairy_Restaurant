@@ -1,41 +1,49 @@
+import { cookies } from "next/headers";
 import { createServerClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
 import { AdminDashboard } from "@/components/admin/admin-dashboard";
 import { SignOutButton } from "@/components/admin/sign-out-button";
+import { isAdminUser } from "@/lib/admin";
 import type { Order, OrderItem, Settings } from "@/lib/supabase/database.types";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminOrdersPage() {
   const supabase = await createServerClient();
+  const cookieStore = await cookies();
+  const isCookieAdmin = cookieStore.get("admin_auth")?.value === "true";
 
-  // Double-check auth server-side (middleware also guards this)
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) {
-    redirect("/admin/login");
+
+  // Server-side RBAC check — non-admins are silently redirected to home
+  if (!isCookieAdmin && (!user || !isAdminUser(user))) {
+    redirect("/");
   }
+
+  // Use admin client (service role) to bypass RLS and fetch all orders
+  const admin = createAdminClient();
 
   // Fetch recent orders with their line items
   const [{ data: ordersData }, { data: settingsData }] = await Promise.all([
-    supabase
+    admin
       .from("orders")
       .select("*")
-      .order("created_at", { ascending: false })
+      .order("placed_at", { ascending: false })
       .limit(50),
-    supabase.from("settings").select("*").single(),
+    admin.from("settings").select("*").single(),
   ]);
 
   const orderIds = (ordersData ?? []).map((o) => o.id);
 
   let lineItems: OrderItem[] = [];
   if (orderIds.length > 0) {
-    const { data: itemsData } = await supabase
+    const { data: itemsData } = await admin
       .from("order_items")
       .select("*")
-      .in("order_id", orderIds)
-      .order("sort_order", { ascending: true });
+      .in("order_id", orderIds);
     lineItems = (itemsData ?? []) as OrderItem[];
   }
 
@@ -46,7 +54,7 @@ export default async function AdminOrdersPage() {
       initialOrders={orders}
       initialLineItems={lineItems}
       settings={(settingsData as Settings) ?? null}
-      userEmail={user.email ?? "admin"}
+      userEmail={user?.email ?? "admin@azlandairy.com"}
       signOutButton={<SignOutButton />}
     />
   );

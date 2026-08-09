@@ -57,6 +57,48 @@ function timeAgo(dateStr: string): string {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
+function parseOrderNote(noteStr: string | null) {
+  if (!noteStr)
+    return {
+      orderTypeTag: null,
+      paymentTag: null,
+      unavailableTag: null,
+      customNote: null,
+    };
+
+  let remaining = noteStr;
+
+  // Extract [PICKUP] or [DELIVERY]
+  let orderTypeTag: string | null = null;
+  const typeMatch = remaining.match(/\[(PICKUP|DELIVERY)\]/i);
+  if (typeMatch) {
+    orderTypeTag = typeMatch[1].toUpperCase();
+    remaining = remaining.replace(typeMatch[0], "");
+  }
+
+  // Extract [COD] or [BANK_TRANSFER] or [ONLINE]
+  let paymentTag: string | null = null;
+  const payMatch = remaining.match(/\[(COD|BANK_TRANSFER|ONLINE)\]/i);
+  if (payMatch) {
+    paymentTag = payMatch[1].toUpperCase();
+    remaining = remaining.replace(payMatch[0], "");
+  }
+
+  // Extract [If unavailable: ...] or [UNAVAILABLE ITEM: ...]
+  let unavailableTag: string | null = null;
+  const unavailMatch = remaining.match(
+    /\[(?:If unavailable|UNAVAILABLE ITEM):\s*([^\]]+)\]/i
+  );
+  if (unavailMatch) {
+    unavailableTag = unavailMatch[1].trim();
+    remaining = remaining.replace(unavailMatch[0], "");
+  }
+
+  const customNote = remaining.trim();
+
+  return { orderTypeTag, paymentTag, unavailableTag, customNote };
+}
+
 export function OrderCard({
   order,
   items,
@@ -66,8 +108,12 @@ export function OrderCard({
 }) {
   const [updating, setUpdating] = useState(false);
   const [expanded, setExpanded] = useState(false);
-  const supabase = createBrowserClient();
   const cfg = STATUS_CONFIG[order.status];
+
+  const parsed = parseOrderNote(order.customer_note);
+  const isPickup =
+    parsed.orderTypeTag === "PICKUP" ||
+    order.customer_address?.toLowerCase().includes("store pickup");
 
   async function updateStatus(newStatus: OrderStatus) {
     if (updating) return;
@@ -86,7 +132,9 @@ export function OrderCard({
         throw new Error(data.error || "Failed to update order status");
       }
 
-      toast.success(`Order ${order.order_number} → ${STATUS_CONFIG[newStatus].label}`);
+      toast.success(
+        `Order ${order.order_number} → ${STATUS_CONFIG[newStatus].label}`
+      );
     } catch (err: any) {
       toast.error(err.message || "Failed to update order status");
     } finally {
@@ -106,7 +154,9 @@ export function OrderCard({
           <div
             className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${cfg.bg} ${cfg.text}`}
           >
-            <span className="material-symbols-outlined text-[20px]">{cfg.icon}</span>
+            <span className="material-symbols-outlined text-[20px]">
+              {cfg.icon}
+            </span>
           </div>
           <div>
             <div className="flex items-center gap-2">
@@ -120,7 +170,8 @@ export function OrderCard({
               </span>
             </div>
             <p className="text-xs text-[var(--color-on-surface-variant)] mt-0.5">
-              {timeAgo(order.placed_at)} · {items.length} item{items.length !== 1 ? "s" : ""}
+              {timeAgo(order.placed_at)} · {items.length} item
+              {items.length !== 1 ? "s" : ""}
             </p>
           </div>
         </div>
@@ -138,69 +189,123 @@ export function OrderCard({
         </button>
       </div>
 
-      {/* Customer + Total */}
-      <div className="px-4 pb-3 space-y-1.5 text-sm">
+      {/* Customer + Details */}
+      <div className="px-4 pb-3 space-y-2 text-sm">
         <div className="flex items-center gap-2 text-[var(--color-on-surface-variant)]">
           <span className="material-symbols-outlined text-[16px]">person</span>
-          <span className="font-medium text-[var(--color-on-surface)]">{order.customer_name}</span>
+          <span className="font-semibold text-[var(--color-on-surface)]">
+            {order.customer_name}
+          </span>
         </div>
         <div className="flex items-center gap-2 text-[var(--color-on-surface-variant)]">
           <span className="material-symbols-outlined text-[16px]">call</span>
-          <a href={`tel:${order.customer_phone}`} className="hover:underline">
+          <a
+            href={`tel:${order.customer_phone}`}
+            className="font-medium hover:underline text-slate-800"
+          >
             {order.customer_phone}
           </a>
         </div>
         <div className="flex items-start gap-2 text-[var(--color-on-surface-variant)]">
-          <span className="material-symbols-outlined text-[16px] mt-0.5">location_on</span>
-          <span className="flex-1">{order.customer_address}</span>
+          <span className="material-symbols-outlined text-[16px] mt-0.5">
+            location_on
+          </span>
+          <span className="flex-1 text-xs sm:text-sm text-slate-700">
+            {order.customer_address}
+          </span>
         </div>
 
-        {/* Delivery Information */}
-        <div className="mt-3 p-3 rounded-lg bg-[var(--color-surface-container-low)] space-y-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-[16px] text-[var(--color-primary)]">straight</span>
-              <span className="text-xs text-[var(--color-on-surface-variant)]">
-                {order.delivery_distance_km ? `${order.delivery_distance_km.toFixed(1)} km` : "Standard delivery"}
+        {/* Delivery / Pickup Box */}
+        {!isPickup ? (
+          <div className="mt-2 p-3 rounded-xl bg-[var(--color-surface-container-low)] space-y-2 border border-slate-200">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-[16px] text-[var(--color-primary)]">
+                  straight
+                </span>
+                <span className="text-xs font-semibold text-[var(--color-on-surface-variant)]">
+                  {order.delivery_distance_km
+                    ? `${order.delivery_distance_km.toFixed(1)} km`
+                    : "Standard delivery"}
+                </span>
+              </div>
+              <span className="font-bold text-xs sm:text-sm text-[var(--color-primary)]">
+                Delivery: Rs. {order.delivery_fee || 60}
               </span>
             </div>
-            <span className="font-bold text-sm text-[var(--color-primary)]">
-              Delivery: Rs. {order.delivery_fee || 60}
-            </span>
-          </div>
 
-          {/* Google Maps Navigation Button */}
-          {order.delivery_coordinates ? (
-            <a
-              href={`https://www.google.com/maps/search/?api=1&query=${order.delivery_coordinates.lat},${order.delivery_coordinates.lng}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 px-3 py-2 rounded-full bg-[var(--color-primary)] text-white text-xs font-bold hover:bg-[var(--color-primary-container)] transition-colors"
-            >
-              <span className="material-symbols-outlined text-[16px]">navigation</span>
-              Open in Google Maps
-            </a>
-          ) : order.customer_address ? (
-            <a
-              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(order.customer_address)}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 px-3 py-2 rounded-full bg-[var(--color-primary)] text-white text-xs font-bold hover:bg-[var(--color-primary-container)] transition-colors"
-            >
-              <span className="material-symbols-outlined text-[16px]">navigation</span>
-              Open in Google Maps
-            </a>
-          ) : null}
+            {order.delivery_coordinates ? (
+              <a
+                href={`https://www.google.com/maps/search/?api=1&query=${order.delivery_coordinates.lat},${order.delivery_coordinates.lng}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[var(--color-primary)] text-white text-xs font-bold hover:bg-[var(--color-primary-container)] transition-colors"
+              >
+                <span className="material-symbols-outlined text-[16px]">
+                  navigation
+                </span>
+                Open in Google Maps
+              </a>
+            ) : order.customer_address ? (
+              <a
+                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                  order.customer_address
+                )}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[var(--color-primary)] text-white text-xs font-bold hover:bg-[var(--color-primary-container)] transition-colors"
+              >
+                <span className="material-symbols-outlined text-[16px]">
+                  navigation
+                </span>
+                Open in Google Maps
+              </a>
+            ) : null}
+          </div>
+        ) : null}
+
+        {/* ONE LINE FORMATTED BADGES FOR TYPE, PAYMENT & UNAVAILABLE ACTION */}
+        <div className="flex flex-wrap items-center gap-1.5 pt-1">
+          {isPickup ? (
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-100 text-amber-900 border border-amber-300/70 shadow-xs">
+              🏪 Pickup
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-blue-100 text-blue-900 border border-blue-300/70 shadow-xs">
+              🚚 Delivery
+            </span>
+          )}
+
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-100 text-emerald-900 border border-emerald-300/70 shadow-xs">
+            {parsed.paymentTag === "BANK_TRANSFER"
+              ? "🏦 Bank Transfer"
+              : "💵 COD"}
+          </span>
+
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-purple-100 text-purple-900 border border-purple-300/70 shadow-xs">
+            <span>If unavailable:</span>
+            <span className="font-extrabold underline decoration-purple-400">
+              {parsed.unavailableTag || "Call me"}
+            </span>
+          </span>
         </div>
-        {order.customer_note && (
-          <div className="flex items-start gap-2 text-[var(--color-on-surface-variant)]">
-            <span className="material-symbols-outlined text-[16px] mt-0.5">sticky_note_2</span>
-            <span className="flex-1 italic">{order.customer_note}</span>
+
+        {/* Custom note (if any user message remains) */}
+        {parsed.customNote && (
+          <div className="flex items-start gap-1.5 text-xs text-slate-700 bg-amber-50/80 p-2.5 rounded-lg border border-amber-200/80 mt-1">
+            <span className="material-symbols-outlined text-[16px] text-amber-700 shrink-0 mt-0.5">
+              sticky_note_2
+            </span>
+            <span className="italic">{parsed.customNote}</span>
           </div>
         )}
+
+        {/* Total Price */}
         <div className="pt-2 border-t border-[var(--color-outline-variant)]/50 flex items-center justify-between">
-          <span className="text-xs text-[var(--color-on-surface-variant)]">Total</span>
-          <span className="font-extrabold text-[var(--color-primary)] text-lg">
+          <span className="text-xs font-medium text-[var(--color-on-surface-variant)]">
+            Total
+          </span>
+          <span className="font-black text-[var(--color-primary)] text-xl">
             Rs. {order.total}
           </span>
         </div>
@@ -235,10 +340,12 @@ export function OrderCard({
             <button
               onClick={() => updateStatus("preparing")}
               disabled={updating}
-              className="flex-1 min-w-[120px] py-2.5 rounded-full bg-blue-500 text-white font-bold text-sm
-                hover:bg-blue-600 disabled:opacity-50 transition-colors flex items-center justify-center gap-1.5"
+              className="flex-1 min-w-[120px] py-2.5 rounded-full bg-blue-600 text-white font-bold text-sm
+                hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-1.5 shadow-sm"
             >
-              <span className="material-symbols-outlined text-[16px]">soup_kitchen</span>
+              <span className="material-symbols-outlined text-[16px]">
+                soup_kitchen
+              </span>
               Start Preparing
             </button>
           )}
@@ -246,10 +353,12 @@ export function OrderCard({
             <button
               onClick={() => updateStatus("ready")}
               disabled={updating}
-              className="flex-1 min-w-[120px] py-2.5 rounded-full bg-purple-500 text-white font-bold text-sm
-                hover:bg-purple-600 disabled:opacity-50 transition-colors flex items-center justify-center gap-1.5"
+              className="flex-1 min-w-[120px] py-2.5 rounded-full bg-purple-600 text-white font-bold text-sm
+                hover:bg-purple-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-1.5 shadow-sm"
             >
-              <span className="material-symbols-outlined text-[16px]">checklist</span>
+              <span className="material-symbols-outlined text-[16px]">
+                checklist
+              </span>
               Mark Ready
             </button>
           )}
@@ -258,9 +367,11 @@ export function OrderCard({
               onClick={() => updateStatus("completed")}
               disabled={updating}
               className="flex-1 min-w-[120px] py-2.5 rounded-full bg-[var(--color-success)] text-white font-bold text-sm
-                hover:brightness-110 disabled:opacity-50 transition-colors flex items-center justify-center gap-1.5"
+                hover:brightness-110 disabled:opacity-50 transition-colors flex items-center justify-center gap-1.5 shadow-sm"
             >
-              <span className="material-symbols-outlined text-[16px]">task_alt</span>
+              <span className="material-symbols-outlined text-[16px]">
+                task_alt
+              </span>
               Complete
             </button>
           )}
@@ -268,9 +379,10 @@ export function OrderCard({
             onClick={() => updateStatus("cancelled")}
             disabled={updating}
             className="py-2.5 px-4 rounded-full bg-[var(--color-error)]/10 text-[var(--color-error)] font-bold text-sm
-              hover:bg-[var(--color-error)]/20 disabled:opacity-50 transition-colors"
+              hover:bg-[var(--color-error)]/20 disabled:opacity-50 transition-colors flex items-center justify-center"
+            title="Cancel order"
           >
-            <span className="material-symbols-outlined text-[16px]">cancel</span>
+            <span className="material-symbols-outlined text-[18px]">cancel</span>
           </button>
         </div>
       )}
