@@ -128,9 +128,10 @@ export async function POST(req: NextRequest) {
     }
 
     // Insert order line items
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     const lineItems = body.items.map((item) => ({
       order_id: order.id,
-      item_id: item.id,
+      item_id: uuidRegex.test(item.id) ? item.id : null,
       name_snapshot: item.name,
       price_snapshot: item.price,
       quantity: item.quantity,
@@ -143,8 +144,6 @@ export async function POST(req: NextRequest) {
 
     if (itemsError) {
       console.error("Failed to insert order items:", itemsError);
-      // Order was created but items failed — log but don't fail the response
-      // since the order ID is already generated
     }
 
     // --- Send Order Confirmation Email ---

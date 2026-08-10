@@ -187,14 +187,19 @@ export function AdminDashboard({
     };
   }, [playAlert]);
 
+  const fetchedOrderIdsRef = useRef<Set<string>>(new Set());
+
   // Fetch line items for a new order (since INSERT on order_items may lag)
   const fetchLineItems = useCallback(async (orderId: string) => {
+    if (fetchedOrderIdsRef.current.has(orderId)) return;
+    fetchedOrderIdsRef.current.add(orderId);
+
     const supabase = supabaseRef.current;
     const { data } = await supabase
       .from("order_items")
       .select("*")
       .eq("order_id", orderId);
-    if (data) {
+    if (data && data.length > 0) {
       setLineItems((prev) => {
         const existingIds = new Set(prev.map((i) => i.id));
         const fresh = (data as OrderItem[]).filter((i) => !existingIds.has(i.id));

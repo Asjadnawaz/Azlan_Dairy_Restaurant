@@ -300,38 +300,58 @@ export function OrderCard({
           </div>
         )}
 
+        {/* ORDER ITEMS LIST - ALWAYS VISIBLE FOR ADMIN */}
+        <div className="pt-2.5 border-t border-[var(--color-outline-variant)]/60">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-extrabold uppercase tracking-wide text-[#00230c] flex items-center gap-1.5">
+              <span className="material-symbols-outlined text-[18px] text-[var(--color-primary)]">
+                restaurant_menu
+              </span>
+              Order Items ({items.length})
+            </span>
+          </div>
+
+          {items.length > 0 ? (
+            <div className="space-y-1.5 bg-emerald-950/5 p-2.5 rounded-xl border border-emerald-900/10">
+              {items.map((item) => (
+                <div
+                  key={item.id}
+                  className="flex items-center justify-between text-xs sm:text-sm py-1 border-b border-emerald-900/5 last:border-0"
+                >
+                  <div className="flex items-center gap-2 min-w-0 pr-2">
+                    <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-md bg-[#00230c] text-[#FFC700] font-black text-xs shrink-0 shadow-xs">
+                      {item.quantity}×
+                    </span>
+                    <span className="font-bold text-slate-900 truncate">
+                      {item.name_snapshot}
+                    </span>
+                  </div>
+                  <span className="font-black text-[#00230c] shrink-0">
+                    Rs. {item.line_total}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="bg-amber-50 p-2.5 rounded-xl border border-amber-200 text-xs text-amber-800 flex items-center gap-2">
+              <span className="material-symbols-outlined text-[18px] text-amber-600 shrink-0">
+                warning
+              </span>
+              <span>No line items recorded for this order.</span>
+            </div>
+          )}
+        </div>
+
         {/* Total Price */}
         <div className="pt-2 border-t border-[var(--color-outline-variant)]/50 flex items-center justify-between">
-          <span className="text-xs font-medium text-[var(--color-on-surface-variant)]">
-            Total
+          <span className="text-xs font-bold uppercase tracking-wide text-[var(--color-on-surface-variant)]">
+            Total Amount
           </span>
           <span className="font-black text-[var(--color-primary)] text-xl">
             Rs. {order.total}
           </span>
         </div>
       </div>
-
-      {/* Expanded: line items */}
-      {expanded && items.length > 0 && (
-        <div className="px-4 pb-3 border-t border-[var(--color-outline-variant)]/50 pt-3">
-          <p className="text-xs font-bold uppercase tracking-wide text-[var(--color-on-surface-variant)] mb-2">
-            Items
-          </p>
-          <ul className="space-y-1">
-            {items.map((item) => (
-              <li key={item.id} className="flex justify-between text-sm">
-                <span>
-                  <span className="font-semibold">{item.quantity}×</span>{" "}
-                  {item.name_snapshot}
-                </span>
-                <span className="text-[var(--color-on-surface-variant)]">
-                  Rs. {item.line_total}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
 
       {/* Action buttons */}
       {order.status !== "completed" && order.status !== "cancelled" && (
