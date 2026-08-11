@@ -166,7 +166,7 @@ export function Hero({ settings }: { settings: Settings | null }) {
 
         {/* CTA */}
         <a
-          href="#menu"
+          href="/#menu"
           className="mt-2 inline-flex items-center gap-2 px-8 py-4 rounded-full font-extrabold text-base sm:text-lg transition-all duration-200 hover:brightness-110 hover:-translate-y-1 custom-shadow-lg"
           style={{
             background: "var(--color-cta-yellow)",

@@ -114,7 +114,7 @@ export function Footer({ settings }: { settings: Settings | null }) {
           <ul className="mt-3 space-y-2 text-sm text-white/70">
             {CATEGORIES.map((c) => (
               <li key={c}>
-                <a href={`#${slugify(c)}`} className="hover:text-white transition-colors">
+                <a href={`/#${slugify(c)}`} className="hover:text-white transition-colors">
                   {c}
                 </a>
               </li>
@@ -129,10 +129,13 @@ export function Footer({ settings }: { settings: Settings | null }) {
           </h4>
           <ul className="mt-3 space-y-2 text-sm text-white/70">
             <li>
-              <a href="#about" className="hover:text-white transition-colors">About Us</a>
+              <a href="/#about" className="hover:text-white transition-colors">About Us</a>
             </li>
             <li>
-              <a href="#menu" className="hover:text-white transition-colors">Full Menu</a>
+              <a href="/#menu" className="hover:text-white transition-colors">Full Menu</a>
+            </li>
+            <li>
+              <a href="/privacy-policy" className="hover:text-white transition-colors">Privacy Policy</a>
             </li>
           </ul>
         </div>

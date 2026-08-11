@@ -1,9 +1,15 @@
-"use client";
-
 import { useState } from "react";
+import Image from "next/image";
+import dynamic from "next/dynamic";
+import { MENU_ITEMS } from "@/data/menu-data";
 import { createBrowserClient } from "@/lib/supabase/client";
 import type { Order, OrderItem, OrderStatus } from "@/lib/supabase/database.types";
 import { toast } from "sonner";
+
+const OrderMap = dynamic(() => import("./order-map"), {
+  ssr: false,
+  loading: () => <div className="w-full h-40 bg-slate-100 animate-pulse rounded-[var(--radius-lg)]"></div>
+});
 
 const STATUS_CONFIG: Record<
   OrderStatus,
@@ -12,37 +18,37 @@ const STATUS_CONFIG: Record<
   pending: {
     label: "Pending",
     bg: "bg-amber-100",
-    text: "text-amber-700",
+    text: "text-amber-800",
     icon: "hourglass_top",
   },
   preparing: {
     label: "Preparing",
     bg: "bg-blue-100",
-    text: "text-blue-700",
+    text: "text-blue-800",
     icon: "soup_kitchen",
   },
   ready: {
     label: "Ready",
     bg: "bg-purple-100",
-    text: "text-purple-700",
+    text: "text-purple-800",
     icon: "checklist",
   },
   delivering: {
     label: "Delivering",
     bg: "bg-indigo-100",
-    text: "text-indigo-700",
+    text: "text-indigo-800",
     icon: "delivery_dining",
   },
   completed: {
     label: "Completed",
-    bg: "bg-green-100",
-    text: "text-green-700",
+    bg: "bg-emerald-100",
+    text: "text-emerald-800",
     icon: "task_alt",
   },
   cancelled: {
     label: "Cancelled",
-    bg: "bg-red-100",
-    text: "text-red-700",
+    bg: "bg-rose-100",
+    text: "text-rose-800",
     icon: "cancel",
   },
 };
@@ -68,7 +74,6 @@ function parseOrderNote(noteStr: string | null) {
 
   let remaining = noteStr;
 
-  // Extract [PICKUP] or [DELIVERY]
   let orderTypeTag: string | null = null;
   const typeMatch = remaining.match(/\[(PICKUP|DELIVERY)\]/i);
   if (typeMatch) {
@@ -76,7 +81,6 @@ function parseOrderNote(noteStr: string | null) {
     remaining = remaining.replace(typeMatch[0], "");
   }
 
-  // Extract [COD] or [BANK_TRANSFER] or [ONLINE]
   let paymentTag: string | null = null;
   const payMatch = remaining.match(/\[(COD|BANK_TRANSFER|ONLINE)\]/i);
   if (payMatch) {
@@ -84,7 +88,6 @@ function parseOrderNote(noteStr: string | null) {
     remaining = remaining.replace(payMatch[0], "");
   }
 
-  // Extract [If unavailable: ...] or [UNAVAILABLE ITEM: ...]
   let unavailableTag: string | null = null;
   const unavailMatch = remaining.match(
     /\[(?:If unavailable|UNAVAILABLE ITEM):\s*([^\]]+)\]/i
@@ -107,7 +110,6 @@ export function OrderCard({
   items: OrderItem[];
 }) {
   const [updating, setUpdating] = useState(false);
-  const [expanded, setExpanded] = useState(false);
   const cfg = STATUS_CONFIG[order.status];
 
   const parsed = parseOrderNote(order.customer_note);
@@ -144,226 +146,209 @@ export function OrderCard({
 
   return (
     <div
-      className={`rounded-[var(--radius-xl)] border bg-[var(--color-surface-container-lowest)]
-        border-[var(--color-outline-variant)] overflow-hidden transition-all
-        ${order.status === "pending" ? "ring-2 ring-amber-400/50" : ""}`}
+      className={`rounded-2xl border bg-white shadow-sm hover:shadow-md transition-shadow
+        overflow-hidden ${order.status === "pending" ? "border-amber-300 ring-1 ring-amber-300/50" : "border-slate-200"}`}
     >
-      {/* Header */}
-      <div className="p-4 flex items-start justify-between gap-3">
-        <div className="flex items-start gap-3">
-          <div
-            className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${cfg.bg} ${cfg.text}`}
-          >
-            <span className="material-symbols-outlined text-[20px]">
-              {cfg.icon}
-            </span>
-          </div>
+      <div className="p-5">
+        {/* Customer Header - High Priority */}
+        <div className="flex justify-between items-start mb-5">
           <div>
-            <div className="flex items-center gap-2">
-              <h3 className="font-bold text-[var(--color-primary)]">
+            <h3 className="text-xl font-black text-slate-900 tracking-tight leading-tight">
+              {order.customer_name}
+            </h3>
+            <a
+              href={`tel:${order.customer_phone}`}
+              className="mt-1 flex items-center gap-1.5 text-sm font-semibold text-slate-600 hover:text-emerald-700 transition-colors"
+            >
+              <span className="material-symbols-outlined text-[16px]">call</span>
+              {order.customer_phone}
+            </a>
+          </div>
+          <div className="text-right flex flex-col items-end gap-1.5">
+            <span
+              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold ${cfg.bg} ${cfg.text} shadow-sm border border-black/5`}
+            >
+              <span className="material-symbols-outlined text-[14px]">
+                {cfg.icon}
+              </span>
+              {cfg.label}
+            </span>
+            <div className="flex flex-col items-end">
+              <span className="text-sm font-extrabold text-slate-400">
                 {order.order_number}
-              </h3>
-              <span
-                className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${cfg.bg} ${cfg.text}`}
-              >
-                {cfg.label}
+              </span>
+              <span className="text-[11px] font-medium text-slate-400">
+                {timeAgo(order.placed_at)}
               </span>
             </div>
-            <p className="text-xs text-[var(--color-on-surface-variant)] mt-0.5">
-              {timeAgo(order.placed_at)} · {items.length} item
-              {items.length !== 1 ? "s" : ""}
-            </p>
           </div>
         </div>
-        <button
-          onClick={() => setExpanded(!expanded)}
-          className="p-1.5 rounded-full hover:bg-[var(--color-surface-container)]"
-          aria-label="Toggle details"
-        >
-          <span
-            className="material-symbols-outlined text-[20px] transition-transform"
-            style={{ transform: expanded ? "rotate(180deg)" : "none" }}
-          >
-            keyboard_arrow_down
-          </span>
-        </button>
-      </div>
 
-      {/* Customer + Details */}
-      <div className="px-4 pb-3 space-y-2 text-sm">
-        <div className="flex items-center gap-2 text-[var(--color-on-surface-variant)]">
-          <span className="material-symbols-outlined text-[16px]">person</span>
-          <span className="font-semibold text-[var(--color-on-surface)]">
-            {order.customer_name}
-          </span>
-        </div>
-        <div className="flex items-center gap-2 text-[var(--color-on-surface-variant)]">
-          <span className="material-symbols-outlined text-[16px]">call</span>
-          <a
-            href={`tel:${order.customer_phone}`}
-            className="font-medium hover:underline text-slate-800"
-          >
-            {order.customer_phone}
-          </a>
-        </div>
-        <div className="flex items-start gap-2 text-[var(--color-on-surface-variant)]">
-          <span className="material-symbols-outlined text-[16px] mt-0.5">
-            location_on
-          </span>
-          <span className="flex-1 text-xs sm:text-sm text-slate-700">
-            {order.customer_address}
-          </span>
-        </div>
-
-        {/* Delivery / Pickup Box */}
-        {!isPickup ? (
-          <div className="mt-2 p-3 rounded-xl bg-[var(--color-surface-container-low)] space-y-2 border border-slate-200">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-[16px] text-[var(--color-primary)]">
-                  straight
-                </span>
-                <span className="text-xs font-semibold text-[var(--color-on-surface-variant)]">
-                  {order.delivery_distance_km
-                    ? `${order.delivery_distance_km.toFixed(1)} km`
-                    : "Standard delivery"}
-                </span>
-              </div>
-              <span className="font-bold text-xs sm:text-sm text-[var(--color-primary)]">
-                Delivery: Rs. {order.delivery_fee || 60}
-              </span>
-            </div>
-
-            {order.delivery_coordinates ? (
-              <a
-                href={`https://www.google.com/maps/search/?api=1&query=${order.delivery_coordinates.lat},${order.delivery_coordinates.lng}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[var(--color-primary)] text-white text-xs font-bold hover:bg-[var(--color-primary-container)] transition-colors"
-              >
-                <span className="material-symbols-outlined text-[16px]">
-                  navigation
-                </span>
-                Open in Google Maps
-              </a>
-            ) : order.customer_address ? (
-              <a
-                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-                  order.customer_address
-                )}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[var(--color-primary)] text-white text-xs font-bold hover:bg-[var(--color-primary-container)] transition-colors"
-              >
-                <span className="material-symbols-outlined text-[16px]">
-                  navigation
-                </span>
-                Open in Google Maps
-              </a>
-            ) : null}
-          </div>
-        ) : null}
-
-        {/* ONE LINE FORMATTED BADGES FOR TYPE, PAYMENT & UNAVAILABLE ACTION */}
-        <div className="flex flex-wrap items-center gap-1.5 pt-1">
+        {/* Badges / Order Meta */}
+        <div className="flex flex-wrap items-center gap-2 mb-5">
           {isPickup ? (
-            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-100 text-amber-900 border border-amber-300/70 shadow-xs">
-              🏪 Pickup
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-amber-50 text-amber-800 border border-amber-200/70">
+              <span className="material-symbols-outlined text-[14px]">storefront</span>
+              Pickup
             </span>
           ) : (
-            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-blue-100 text-blue-900 border border-blue-300/70 shadow-xs">
-              🚚 Delivery
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-blue-50 text-blue-800 border border-blue-200/70">
+              <span className="material-symbols-outlined text-[14px]">local_shipping</span>
+              Delivery
             </span>
           )}
 
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-100 text-emerald-900 border border-emerald-300/70 shadow-xs">
-            {parsed.paymentTag === "BANK_TRANSFER"
-              ? "🏦 Bank Transfer"
-              : "💵 COD"}
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-200/70">
+            <span className="material-symbols-outlined text-[14px]">payments</span>
+            {parsed.paymentTag === "BANK_TRANSFER" ? "Bank Transfer" : "COD"}
           </span>
 
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-purple-100 text-purple-900 border border-purple-300/70 shadow-xs">
-            <span>If unavailable:</span>
-            <span className="font-extrabold underline decoration-purple-400">
-              {parsed.unavailableTag || "Call me"}
+          {parsed.unavailableTag && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-rose-50 text-rose-800 border border-rose-200/70">
+              <span className="material-symbols-outlined text-[14px]">error</span>
+              If unavailable: {parsed.unavailableTag}
             </span>
-          </span>
+          )}
         </div>
 
-        {/* Custom note (if any user message remains) */}
+        {/* Custom note */}
         {parsed.customNote && (
-          <div className="flex items-start gap-1.5 text-xs text-slate-700 bg-amber-50/80 p-2.5 rounded-lg border border-amber-200/80 mt-1">
-            <span className="material-symbols-outlined text-[16px] text-amber-700 shrink-0 mt-0.5">
+          <div className="mb-5 flex items-start gap-2 text-sm text-slate-700 bg-amber-50/50 p-3 rounded-xl border border-amber-200/50">
+            <span className="material-symbols-outlined text-[18px] text-amber-600 shrink-0 mt-0.5">
               sticky_note_2
             </span>
-            <span className="italic">{parsed.customNote}</span>
+            <span className="italic font-medium">{parsed.customNote}</span>
           </div>
         )}
 
-        {/* ORDER ITEMS LIST - ALWAYS VISIBLE FOR ADMIN */}
-        <div className="pt-2.5 border-t border-[var(--color-outline-variant)]/60">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-extrabold uppercase tracking-wide text-[#00230c] flex items-center gap-1.5">
-              <span className="material-symbols-outlined text-[18px] text-[var(--color-primary)]">
-                restaurant_menu
-              </span>
-              Order Items ({items.length})
-            </span>
+        {/* Map Integration */}
+        {!isPickup && (
+          <div className="mb-6 bg-slate-50 p-1 rounded-[10px] border border-slate-200 shadow-sm">
+            {order.delivery_coordinates ? (
+              <OrderMap
+                deliveryLat={order.delivery_coordinates.lat}
+                deliveryLng={order.delivery_coordinates.lng}
+              />
+            ) : (
+               <div className="w-full h-40 bg-slate-100 rounded-lg flex items-center justify-center flex-col text-slate-400">
+                  <span className="material-symbols-outlined text-[32px] mb-2">location_off</span>
+                  <span className="text-sm font-semibold">No map coordinates</span>
+               </div>
+            )}
+            <div className="flex items-start justify-between gap-3 p-3">
+              <div className="flex-1">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">Delivery Address</p>
+                <p className="text-sm font-semibold text-slate-700 leading-snug">
+                  {order.customer_address}
+                </p>
+              </div>
+              <div className="text-right shrink-0">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">Distance</p>
+                <p className="text-sm font-bold text-emerald-700">
+                  {order.delivery_distance_km ? `${order.delivery_distance_km.toFixed(1)} km` : "N/A"}
+                </p>
+              </div>
+            </div>
           </div>
+        )}
 
+        {/* Order Items */}
+        <div className="mb-6">
+          <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+            Order Items
+            <span className="bg-slate-200 text-slate-600 py-0.5 px-2 rounded-full text-[10px]">{items.length}</span>
+          </h4>
+          
           {items.length > 0 ? (
-            <div className="space-y-1.5 bg-emerald-950/5 p-2.5 rounded-xl border border-emerald-900/10">
-              {items.map((item) => (
-                <div
-                  key={item.id}
-                  className="flex items-center justify-between text-xs sm:text-sm py-1 border-b border-emerald-900/5 last:border-0"
-                >
-                  <div className="flex items-center gap-2 min-w-0 pr-2">
-                    <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-md bg-[#00230c] text-[#FFC700] font-black text-xs shrink-0 shadow-xs">
-                      {item.quantity}×
-                    </span>
-                    <span className="font-bold text-slate-900 truncate">
-                      {item.name_snapshot}
-                    </span>
+            <div className="space-y-2">
+              {items.map((item) => {
+                const menuItem = MENU_ITEMS.find(m => m.name === item.name_snapshot);
+                return (
+                  <div
+                    key={item.id}
+                    className="flex items-center gap-3 p-2.5 rounded-xl border border-slate-100 bg-slate-50/50 hover:bg-slate-50 transition-colors"
+                  >
+                    <div className="relative w-14 h-14 rounded-lg overflow-hidden shrink-0 bg-white border border-slate-200 shadow-sm">
+                      {menuItem?.image_path ? (
+                        <Image
+                          src={menuItem.image_path}
+                          alt={item.name_snapshot}
+                          fill
+                          sizes="56px"
+                          className="object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center bg-slate-100 text-slate-300">
+                          <span className="material-symbols-outlined text-[24px]">restaurant</span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="font-bold text-sm text-slate-800 truncate">
+                        {item.name_snapshot}
+                      </h4>
+                      <div className="flex items-center gap-2 mt-1">
+                         <span className="inline-flex items-center justify-center px-1.5 py-0.5 rounded text-[10px] font-black bg-[#00230c] text-[#FFC700]">
+                           {item.quantity}×
+                         </span>
+                         <span className="text-xs font-medium text-slate-500">
+                           @ Rs. {item.price_snapshot}
+                         </span>
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0 pl-2">
+                      <p className="font-black text-sm text-emerald-800">
+                        Rs. {item.line_total}
+                      </p>
+                    </div>
                   </div>
-                  <span className="font-black text-[#00230c] shrink-0">
-                    Rs. {item.line_total}
-                  </span>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
-            <div className="bg-amber-50 p-2.5 rounded-xl border border-amber-200 text-xs text-amber-800 flex items-center gap-2">
-              <span className="material-symbols-outlined text-[18px] text-amber-600 shrink-0">
+            <div className="bg-amber-50 p-4 rounded-xl border border-amber-200 border-dashed text-sm text-amber-800 flex items-center justify-center gap-2">
+              <span className="material-symbols-outlined text-[20px] text-amber-600">
                 warning
               </span>
-              <span>No line items recorded for this order.</span>
+              <span className="font-medium">No line items recorded for this order.</span>
             </div>
           )}
         </div>
 
-        {/* Total Price */}
-        <div className="pt-2 border-t border-[var(--color-outline-variant)]/50 flex items-center justify-between">
-          <span className="text-xs font-bold uppercase tracking-wide text-[var(--color-on-surface-variant)]">
-            Total Amount
-          </span>
-          <span className="font-black text-[var(--color-primary)] text-xl">
-            Rs. {order.total}
-          </span>
+        {/* Totals */}
+        <div className="pt-4 border-t border-slate-200/80">
+          <div className="flex justify-between items-center mb-1 text-sm text-slate-500">
+             <span>Subtotal</span>
+             <span className="font-semibold text-slate-700">Rs. {order.subtotal}</span>
+          </div>
+          {!isPickup && (
+             <div className="flex justify-between items-center mb-2 text-sm text-slate-500">
+               <span>Delivery Fee</span>
+               <span className="font-semibold text-slate-700">Rs. {order.delivery_fee}</span>
+             </div>
+          )}
+          <div className="flex justify-between items-end mt-2">
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+              Total Amount
+            </span>
+            <span className="font-black text-[22px] text-emerald-700 leading-none">
+              Rs. {order.total}
+            </span>
+          </div>
         </div>
       </div>
 
       {/* Action buttons */}
       {order.status !== "completed" && order.status !== "cancelled" && (
-        <div className="px-4 pb-4 pt-2 flex gap-2 flex-wrap">
+        <div className="p-4 bg-slate-50 border-t border-slate-100 flex gap-2">
           {order.status === "pending" && (
             <button
               onClick={() => updateStatus("preparing")}
               disabled={updating}
-              className="flex-1 min-w-[120px] py-2.5 rounded-full bg-blue-600 text-white font-bold text-sm
-                hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-1.5 shadow-sm"
+              className="flex-1 py-3 rounded-xl bg-blue-600 text-white font-bold text-sm
+                hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2 shadow-sm"
             >
-              <span className="material-symbols-outlined text-[16px]">
+              <span className="material-symbols-outlined text-[18px]">
                 soup_kitchen
               </span>
               Start Preparing
@@ -373,10 +358,10 @@ export function OrderCard({
             <button
               onClick={() => updateStatus("ready")}
               disabled={updating}
-              className="flex-1 min-w-[120px] py-2.5 rounded-full bg-purple-600 text-white font-bold text-sm
-                hover:bg-purple-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-1.5 shadow-sm"
+              className="flex-1 py-3 rounded-xl bg-purple-600 text-white font-bold text-sm
+                hover:bg-purple-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2 shadow-sm"
             >
-              <span className="material-symbols-outlined text-[16px]">
+              <span className="material-symbols-outlined text-[18px]">
                 checklist
               </span>
               Mark Ready
@@ -386,10 +371,10 @@ export function OrderCard({
             <button
               onClick={() => updateStatus("completed")}
               disabled={updating}
-              className="flex-1 min-w-[120px] py-2.5 rounded-full bg-[var(--color-success)] text-white font-bold text-sm
-                hover:brightness-110 disabled:opacity-50 transition-colors flex items-center justify-center gap-1.5 shadow-sm"
+              className="flex-1 py-3 rounded-xl bg-emerald-600 text-white font-bold text-sm
+                hover:bg-emerald-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2 shadow-sm"
             >
-              <span className="material-symbols-outlined text-[16px]">
+              <span className="material-symbols-outlined text-[18px]">
                 task_alt
               </span>
               Complete
@@ -398,11 +383,11 @@ export function OrderCard({
           <button
             onClick={() => updateStatus("cancelled")}
             disabled={updating}
-            className="py-2.5 px-4 rounded-full bg-[var(--color-error)]/10 text-[var(--color-error)] font-bold text-sm
-              hover:bg-[var(--color-error)]/20 disabled:opacity-50 transition-colors flex items-center justify-center"
+            className="w-12 h-12 rounded-xl bg-rose-50 text-rose-600 font-bold
+              hover:bg-rose-100 disabled:opacity-50 transition-colors flex items-center justify-center border border-rose-200"
             title="Cancel order"
           >
-            <span className="material-symbols-outlined text-[18px]">cancel</span>
+            <span className="material-symbols-outlined text-[20px]">cancel</span>
           </button>
         </div>
       )}

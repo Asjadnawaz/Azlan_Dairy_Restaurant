@@ -16,8 +16,8 @@ const plusJakarta = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "Azlan Fast Food and B B Q point",
-  description: "Farm to Table Premium - Azlan Fast Food and B B Q point, Karachi",
+  title: "Azlan Fast Food and BBQ point",
+  description: "Farm to Table Premium - Azlan Fast Food and BBQ point, Karachi",
   icons: {
     icon: [
       { url: "/images/logo.png", type: "image/png" }

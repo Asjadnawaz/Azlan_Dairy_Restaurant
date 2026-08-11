@@ -47,13 +47,18 @@ export async function proxy(request: NextRequest) {
   const isUserAdmin = isAdminUser(user) || adminAuthCookie;
 
   if (isAdminRoute && !isLoginRoute && !isUserAdmin) {
-    // Non-admin users (authenticated or not) are silently redirected to home
     return NextResponse.redirect(new URL("/", request.url));
   }
 
-  // If logged in as admin and visiting login page, redirect to dashboard
   if (isLoginRoute && isUserAdmin) {
     return NextResponse.redirect(new URL("/admin/orders", request.url));
+  }
+
+  const isRiderRoute = pathname.startsWith("/rider");
+  const riderAuthCookie = request.cookies.get("rider_auth")?.value === "true";
+
+  if (isRiderRoute && !riderAuthCookie && !isUserAdmin) {
+    return NextResponse.redirect(new URL("/rider", request.url));
   }
 
   return response;
