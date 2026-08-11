@@ -63,7 +63,7 @@ export function Hero({ settings }: { settings: Settings | null }) {
   const isOpen = isStoreActive;
 
   return (
-    <section className="relative overflow-hidden bg-[#072413] text-white flex items-center pt-28 sm:pt-36 lg:pt-32 pb-16 lg:pb-20">
+    <section className="relative overflow-hidden bg-[#072413] text-white flex items-center pt-28 sm:pt-36 lg:pt-12 pb-16 lg:pb-20">
       {/* Ambient background glows */}
       <div className="absolute -top-32 -left-32 w-[500px] h-[500px] rounded-full bg-[#5BE193] opacity-15 blur-[120px] pointer-events-none" />
       <div className="absolute -bottom-32 left-1/3 w-[450px] h-[450px] rounded-full bg-[#FFC700] opacity-10 blur-[140px] pointer-events-none" />

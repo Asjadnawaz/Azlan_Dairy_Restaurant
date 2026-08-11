@@ -171,7 +171,7 @@ export function Header() {
                 key={label}
                 href={href}
                 onClick={href.includes("#") ? (e) => handleHashClick(e, href) : undefined}
-                className="relative px-4 py-2 text-sm font-semibold text-slate-600 rounded-lg hover:text-[var(--color-primary)] hover:bg-emerald-50/80 transition-all duration-200 group/nav"
+                className="relative px-4 py-2 text-base font-semibold text-slate-600 rounded-lg hover:text-[var(--color-primary)] hover:bg-emerald-50/80 transition-all duration-200 group/nav"
               >
                 {label}
                 <span className="absolute bottom-1.5 left-1/2 -translate-x-1/2 h-[2px] w-0 rounded-full bg-[var(--color-primary)] group-hover/nav:w-4 transition-all duration-300" />
