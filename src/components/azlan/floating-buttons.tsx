@@ -10,7 +10,16 @@ export function FloatingButtons() {
   const hasHydrated = useCart((s) => s._hasHydrated);
 
   useEffect(() => {
-    const onScroll = () => setShow(window.scrollY > 500);
+    let ticking = false;
+    const onScroll = () => {
+      if (!ticking) {
+        window.requestAnimationFrame(() => {
+          setShow(window.scrollY > 500);
+          ticking = false;
+        });
+        ticking = true;
+      }
+    };
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);

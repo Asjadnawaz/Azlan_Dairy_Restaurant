@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useCart } from "@/lib/cart-store";
 import { toast } from "sonner";
 import { MapPicker } from "./map-picker";
-import { calculateDeliveryFromCoordinates } from "@/lib/delivery";
+import { calculateDeliveryFromCoordinates, fetchRoadRoute } from "@/lib/delivery";
 import { AuthModal } from "./auth-modal";
 import { getCurrentUser, onAuthStateChange } from "@/lib/supabase/auth";
 
@@ -138,21 +138,43 @@ export function CartDrawer({ isStoreActive }: CartDrawerProps) {
   const total = subtotal + deliveryFee;
 
   // Handle location selection and calculate delivery fee
-  const handleLocationSelect = (lat: number, lng: number) => {
+  const handleLocationSelect = async (lat: number, lng: number) => {
     setDeliveryLocation({ lat, lng });
-    const { distanceKm, deliveryFee: fee, breakdown } = calculateDeliveryFromCoordinates(lat, lng);
-    setDeliveryDistance(distanceKm);
-    setDeliveryFee(fee);
-    setDeliveryBreakdown(breakdown);
+
+    // Immediately show Haversine estimate while OSRM loads
+    const fallback = calculateDeliveryFromCoordinates(lat, lng);
+    setDeliveryDistance(fallback.distanceKm);
+    setDeliveryFee(fallback.deliveryFee);
+    setDeliveryBreakdown(fallback.breakdown + " (calculating road route…)");
+
+    // Fetch accurate road-based distance from OSRM
+    const route = await fetchRoadRoute(lat, lng);
+    setDeliveryDistance(route.distanceKm);
+    setDeliveryFee(route.deliveryFee);
+    setDeliveryBreakdown(route.breakdown);
+
+    if (route.distanceKm > 5.0) {
+      toast.error(
+        `Selected location (${route.distanceKm.toFixed(1)} km) is outside our 5 km delivery radius.`
+      );
+    }
   };
+
+  const isTooFar = deliveryLocation !== null && deliveryDistance > 5.0;
 
   const valid =
     form.name.trim().length > 0 &&
     form.address.trim().length > 0 &&
     form.phone.replace(/\D/g, "").length >= 8 &&
-    deliveryLocation !== null;
+    deliveryLocation !== null &&
+    !isTooFar;
 
   async function handleSubmit() {
+    if (isTooFar) {
+      toast.error(`Your delivery location (${deliveryDistance.toFixed(1)} km) is outside our 5 km delivery radius.`);
+      return;
+    }
+
     if (!valid || submitting) return;
 
     if (!isStoreActive) {
@@ -514,6 +536,19 @@ export function CartDrawer({ isStoreActive }: CartDrawerProps) {
                   <p className="mt-2 text-xs text-[var(--color-on-surface-variant)] bg-[var(--color-surface-container-low)] px-3 py-2 rounded-[var(--radius-md)]">
                     💡 {deliveryBreakdown}
                   </p>
+                )}
+                {isTooFar && (
+                  <div className="mt-2.5 p-3 rounded-[var(--radius-md)] bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-start gap-2">
+                    <span className="material-symbols-outlined text-[18px] text-rose-600 shrink-0 mt-0.5">
+                      error
+                    </span>
+                    <div>
+                      <p className="font-bold text-rose-900">Delivery Unavailable</p>
+                      <p className="mt-0.5 text-[11px] text-rose-700 leading-tight">
+                        Selected location is <strong>{deliveryDistance.toFixed(1)} km</strong> away. We only deliver within <strong>5 KM</strong> of our store.
+                      </p>
+                    </div>
+                  </div>
                 )}
               </div>
               <div>

@@ -1,34 +1,28 @@
 export default function Loading() {
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-[#00230c] text-white">
-      <div className="relative flex flex-col items-center justify-center p-8 text-center">
-        {/* Animated outer glowing ring */}
-        <div className="relative flex items-center justify-center w-28 h-28 mb-6">
-          <div className="absolute inset-0 rounded-full border-4 border-emerald-500/20 border-t-amber-400 border-r-emerald-400 animate-spin" style={{ animationDuration: '1.2s' }} />
-          <div className="absolute inset-2 rounded-full border-2 border-white/10 border-b-amber-400 animate-spin" style={{ animationDirection: 'reverse', animationDuration: '1.8s' }} />
+    <div className="w-full mx-auto max-w-7xl px-4 md:px-8 py-8 animate-pulse">
+      {/* Hero Section Skeleton */}
+      <div className="w-full h-[50vh] md:h-[60vh] rounded-3xl bg-slate-200/70 mb-12" />
+      
+      {/* Trust/Categories Section Skeleton */}
+      <div className="flex gap-4 mb-12 overflow-hidden">
+        {[...Array(5)].map((_, i) => (
+          <div key={i} className="h-12 w-32 rounded-full bg-slate-200/70 shrink-0" />
+        ))}
+      </div>
 
-          {/* Logo */}
-          <div className="relative w-20 h-20 rounded-full overflow-hidden shadow-2xl ring-4 ring-emerald-500/30">
-            <img
-              src="/images/logo.png"
-              alt="Azlan Fast Food and B B Q point"
-              className="w-full h-full object-cover animate-pulse"
-            />
+      {/* Grid Items Skeleton (Menu) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+        {[...Array(8)].map((_, i) => (
+          <div key={i} className="flex flex-col gap-4 mb-8">
+            <div className="w-full h-48 rounded-2xl bg-slate-200/70" />
+            <div className="flex flex-col gap-2">
+              <div className="w-3/4 h-6 rounded-md bg-slate-200/70" />
+              <div className="w-1/2 h-4 rounded-md bg-slate-200/70" />
+            </div>
+            <div className="w-full h-10 rounded-full bg-slate-200/70 mt-2" />
           </div>
-        </div>
-
-        {/* Brand Text */}
-        <h1 className="text-2xl sm:text-3xl font-black tracking-tight uppercase text-white mb-1">
-          AZLAN
-        </h1>
-        <p className="text-xs sm:text-sm font-extrabold uppercase tracking-[0.2em] text-amber-400">
-          Fast Food and B B Q point
-        </p>
-
-        {/* Progress bar line */}
-        <div className="mt-8 w-48 h-1 bg-white/10 rounded-full overflow-hidden relative">
-          <div className="absolute inset-y-0 bg-gradient-to-r from-emerald-500 via-amber-400 to-emerald-400 w-full animate-pulse rounded-full" />
-        </div>
+        ))}
       </div>
     </div>
   );

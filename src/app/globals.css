@@ -217,8 +217,17 @@ body {
 .hero-glow {
   position: absolute;
   border-radius: 50%;
-  filter: blur(100px);
+  filter: blur(60px);
   pointer-events: none;
+  will-change: transform;
+  transform: translateZ(0);
+}
+
+@media (max-width: 640px) {
+  .hero-glow {
+    animation: none !important;
+    filter: blur(35px);
+  }
 }
 
 .hero-glow-1 {
@@ -245,6 +254,8 @@ body {
   position: absolute;
   border-radius: 50%;
   pointer-events: none;
+  will-change: transform, opacity;
+  transform: translateZ(0);
   animation: drift linear infinite;
 }
 

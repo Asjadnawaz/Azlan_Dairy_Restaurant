@@ -51,6 +51,8 @@ export function ProductCard({ item, isStoreActive }: { item: Item; isStoreActive
               : "/images/burger.jpg"
           }
           alt={item.name}
+          loading="lazy"
+          decoding="async"
           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />

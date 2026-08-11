@@ -2,7 +2,6 @@ import { useState } from "react";
 import Image from "next/image";
 import dynamic from "next/dynamic";
 import { MENU_ITEMS } from "@/data/menu-data";
-import { createBrowserClient } from "@/lib/supabase/client";
 import type { Order, OrderItem, OrderStatus } from "@/lib/supabase/database.types";
 import { toast } from "sonner";
 
@@ -34,13 +33,13 @@ const STATUS_CONFIG: Record<
     icon: "checklist",
   },
   delivering: {
-    label: "Delivering",
+    label: "Out for Delivery",
     bg: "bg-indigo-100",
     text: "text-indigo-800",
     icon: "delivery_dining",
   },
   completed: {
-    label: "Completed",
+    label: "Delivered",
     bg: "bg-emerald-100",
     text: "text-emerald-800",
     icon: "task_alt",
@@ -110,8 +109,9 @@ export function OrderCard({
   items: OrderItem[];
 }) {
   const [updating, setUpdating] = useState(false);
-  const cfg = STATUS_CONFIG[order.status];
+  const [calculatedDistance, setCalculatedDistance] = useState<number | null>(null);
 
+  const cfg = STATUS_CONFIG[order.status];
   const parsed = parseOrderNote(order.customer_note);
   const isPickup =
     parsed.orderTypeTag === "PICKUP" ||
@@ -150,7 +150,7 @@ export function OrderCard({
         overflow-hidden ${order.status === "pending" ? "border-amber-300 ring-1 ring-amber-300/50" : "border-slate-200"}`}
     >
       <div className="p-5">
-        {/* Customer Header - High Priority */}
+        {/* Customer Header */}
         <div className="flex justify-between items-start mb-5">
           <div>
             <h3 className="text-xl font-black text-slate-900 tracking-tight leading-tight">
@@ -228,12 +228,13 @@ export function OrderCard({
               <OrderMap
                 deliveryLat={order.delivery_coordinates.lat}
                 deliveryLng={order.delivery_coordinates.lng}
+                onRouteCalculated={(info) => setCalculatedDistance(info.distanceKm)}
               />
             ) : (
-               <div className="w-full h-40 bg-slate-100 rounded-lg flex items-center justify-center flex-col text-slate-400">
-                  <span className="material-symbols-outlined text-[32px] mb-2">location_off</span>
-                  <span className="text-sm font-semibold">No map coordinates</span>
-               </div>
+              <div className="w-full h-40 bg-slate-100 rounded-lg flex items-center justify-center flex-col text-slate-400">
+                <span className="material-symbols-outlined text-[32px] mb-2">location_off</span>
+                <span className="text-sm font-semibold">No map coordinates</span>
+              </div>
             )}
             <div className="flex items-start justify-between gap-3 p-3">
               <div className="flex-1">
@@ -245,7 +246,11 @@ export function OrderCard({
               <div className="text-right shrink-0">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">Distance</p>
                 <p className="text-sm font-bold text-emerald-700">
-                  {order.delivery_distance_km ? `${order.delivery_distance_km.toFixed(1)} km` : "N/A"}
+                  {calculatedDistance !== null
+                    ? `${calculatedDistance.toFixed(1)} km`
+                    : order.delivery_distance_km
+                    ? `${order.delivery_distance_km.toFixed(1)} km`
+                    : "N/A"}
                 </p>
               </div>
             </div>
@@ -369,6 +374,20 @@ export function OrderCard({
           )}
           {order.status === "ready" && (
             <button
+              onClick={() => updateStatus("delivering")}
+              disabled={updating}
+              className="flex-1 py-3 rounded-xl bg-indigo-600 text-white font-bold text-sm
+                hover:bg-indigo-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2 shadow-sm"
+              title="Send order to Rider Dashboard"
+            >
+              <span className="material-symbols-outlined text-[18px]">
+                delivery_dining
+              </span>
+              Out for Delivery
+            </button>
+          )}
+          {order.status === "delivering" && (
+            <button
               onClick={() => updateStatus("completed")}
               disabled={updating}
               className="flex-1 py-3 rounded-xl bg-emerald-600 text-white font-bold text-sm
@@ -377,7 +396,7 @@ export function OrderCard({
               <span className="material-symbols-outlined text-[18px]">
                 task_alt
               </span>
-              Complete
+              Mark Delivered
             </button>
           )}
           <button

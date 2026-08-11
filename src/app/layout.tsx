@@ -6,8 +6,6 @@ import { LayoutChrome } from "@/components/azlan/layout-chrome";
 import { createServerClient } from "@/lib/supabase/server";
 import "./globals.css";
 
-import { InitialLoader } from "@/components/azlan/initial-loader";
-
 const plusJakarta = Plus_Jakarta_Sans({
   variable: "--font-jakarta",
   subsets: ["latin"],
@@ -16,8 +14,8 @@ const plusJakarta = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "Azlan Fast Food and BBQ point",
-  description: "Farm to Table Premium - Azlan Fast Food and BBQ point, Karachi",
+  title: "Azlan Fast Food & BBQ point",
+  description: "Farm to Table Premium - Azlan Fast Food & BBQ point, Karachi",
   icons: {
     icon: [
       { url: "/images/logo.png", type: "image/png" }
@@ -64,7 +62,6 @@ export default async function RootLayout({
         />
       </head>
       <body className="min-h-full flex flex-col">
-        <InitialLoader />
         <ThemeProvider
           attribute="class"
           defaultTheme="light"

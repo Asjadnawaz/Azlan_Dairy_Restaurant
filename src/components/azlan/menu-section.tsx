@@ -4,19 +4,58 @@ import { useState, useRef, useEffect } from "react";
 import { ProductCard } from "./product-card";
 import type { Item } from "@/lib/supabase/database.types";
 
+import { createBrowserClient } from "@/lib/supabase/client";
+
 function slugify(s: string) {
   return s.toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
 
 export function MenuSection({
-  items,
+  items: initialItems,
   isStoreActive,
 }: {
   items: Item[];
   isStoreActive: boolean;
 }) {
+  const [menuItems, setMenuItems] = useState<Item[]>(initialItems);
+
+  // Keep local state in sync if initialItems prop updates
+  useEffect(() => {
+    setMenuItems(initialItems);
+  }, [initialItems]);
+
+  // Realtime listener for live price changes & availability
+  useEffect(() => {
+    const supabase = createBrowserClient();
+    const channel = supabase
+      .channel("menu-items-realtime")
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "items" },
+        (payload) => {
+          const updated = payload.new as Item;
+          setMenuItems((prev) =>
+            prev.map((item) => (item.id === updated.id ? { ...item, ...updated } : item))
+          );
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "items" },
+        (payload) => {
+          const newItem = payload.new as Item;
+          setMenuItems((prev) => [...prev, newItem]);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
   // Group items by category preserves natural menu order
-  const categoryNames = Array.from(new Set(items.map((i) => i.category)));
+  const categoryNames = Array.from(new Set(menuItems.map((i) => i.category)));
   const [activeCategory, setActiveCategory] = useState<string>(categoryNames[0] || "");
 
   const tabRef = useRef<HTMLDivElement>(null);
@@ -24,7 +63,7 @@ export function MenuSection({
 
   // Grouped map: categoryName -> Array of Items
   const groupedItems = categoryNames.reduce<Record<string, Item[]>>((acc, cat) => {
-    acc[cat] = items.filter((i) => i.category === cat);
+    acc[cat] = menuItems.filter((i) => i.category === cat);
     return acc;
   }, {});
 

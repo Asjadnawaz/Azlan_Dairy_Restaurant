@@ -98,6 +98,8 @@ export function TestimonialsSection() {
                   <img
                     src={rev.src}
                     alt={rev.alt}
+                    loading="lazy"
+                    decoding="async"
                     className="max-h-[220px] sm:max-h-[260px] w-auto object-contain rounded-lg hover:scale-[1.02] transition-transform duration-200"
                   />
                 </div>

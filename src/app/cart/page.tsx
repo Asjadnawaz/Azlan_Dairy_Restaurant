@@ -2,10 +2,23 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { useCart } from "@/lib/cart-store";
 import { toast } from "sonner";
-import { MapPicker } from "@/components/azlan/map-picker";
-import { calculateDeliveryFromCoordinates } from "@/lib/delivery";
+import { calculateDeliveryFromCoordinates, fetchRoadRoute } from "@/lib/delivery";
+
+// Leaflet accesses `window` at import time — must be loaded client-only
+const MapPicker = dynamic(
+  () => import("@/components/azlan/map-picker").then((mod) => mod.MapPicker),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="w-full h-64 rounded-[var(--radius-lg)] bg-slate-100 border border-slate-200 flex items-center justify-center">
+        <span className="text-xs text-slate-400 font-semibold">Loading map…</span>
+      </div>
+    ),
+  }
+);
 import { AuthModal } from "@/components/azlan/auth-modal";
 import { getCurrentUser, onAuthStateChange } from "@/lib/supabase/auth";
 import { createBrowserClient } from "@/lib/supabase/client";
@@ -115,12 +128,26 @@ export default function CartPage() {
   const effectiveDeliveryFee = orderType === "pickup" ? 0 : deliveryFee;
   const grandTotal = Math.max(0, subtotal + effectiveDeliveryFee - discount);
 
-  const handleLocationSelect = (lat: number, lng: number) => {
+  const handleLocationSelect = async (lat: number, lng: number) => {
     setDeliveryLocation({ lat, lng });
-    const { distanceKm, deliveryFee: fee, breakdown } = calculateDeliveryFromCoordinates(lat, lng);
-    setDeliveryDistance(distanceKm);
-    setDeliveryFee(fee);
-    setDeliveryBreakdown(breakdown);
+
+    // Immediately show Haversine estimate while OSRM loads
+    const fallback = calculateDeliveryFromCoordinates(lat, lng);
+    setDeliveryDistance(fallback.distanceKm);
+    setDeliveryFee(fallback.deliveryFee);
+    setDeliveryBreakdown(fallback.breakdown + " (calculating road route…)");
+
+    // Fetch accurate road-based distance from OSRM
+    const route = await fetchRoadRoute(lat, lng);
+    setDeliveryDistance(route.distanceKm);
+    setDeliveryFee(route.deliveryFee);
+    setDeliveryBreakdown(route.breakdown);
+
+    if (route.distanceKm > 5.0) {
+      toast.error(
+        `Selected location (${route.distanceKm.toFixed(1)} km) is outside our 5 km delivery radius.`
+      );
+    }
   };
 
   const handleUseCurrentLocation = () => {
@@ -151,9 +178,13 @@ export default function CartPage() {
   };
 
   const fullName = `${firstName} ${lastName}`.trim();
+  const isTooFar = orderType === "delivery" && deliveryLocation !== null && deliveryDistance > 5.0;
+  const isWithinRadius = orderType === "pickup" || (deliveryLocation !== null && deliveryDistance <= 5.0);
+
   const valid =
     firstName.trim().length > 0 &&
-    (orderType === "pickup" || (address.trim().length > 0 && deliveryLocation !== null)) &&
+    (orderType === "pickup" || address.trim().length > 0) &&
+    isWithinRadius &&
     phone.replace(/\D/g, "").length >= 8;
 
   const saveOrderToStorage = (
@@ -185,8 +216,13 @@ export default function CartPage() {
       return;
     }
 
+    if (orderType === "delivery" && deliveryDistance > 5.0) {
+      toast.error(`Your delivery location (${deliveryDistance.toFixed(1)} km) is outside our 5 km delivery radius.`);
+      return;
+    }
+
     if (!valid || submitting) {
-      toast.error("Please fill in required fields (Name, Phone number & Location Pin)");
+      toast.error("Please fill in required fields (Name, Phone number & Location Pin within 5 km)");
       return;
     }
 
@@ -704,6 +740,19 @@ export default function CartPage() {
                       <p className="mt-2 text-xs text-slate-600 bg-slate-100 p-2.5 rounded-xl border border-slate-200">
                         💡 {deliveryBreakdown}
                       </p>
+                    )}
+                    {isTooFar && (
+                      <div className="mt-3 p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold flex items-start gap-2.5 shadow-xs">
+                        <span className="material-symbols-outlined text-[20px] text-rose-600 shrink-0 mt-0.5">
+                          error
+                        </span>
+                        <div>
+                          <p className="font-extrabold text-sm text-rose-900">Delivery Unavailable (Too Far)</p>
+                          <p className="mt-0.5 font-medium text-rose-700 leading-snug">
+                            Selected location is <strong>{deliveryDistance.toFixed(1)} km</strong> away. We only deliver within a <strong>5 KM road distance</strong> of our store. Please select a closer location.
+                          </p>
+                        </div>
+                      </div>
                     )}
                   </div>
                 </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useRef } from "react";
 import { MapContainer, TileLayer, Marker, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -10,17 +10,6 @@ const RESTAURANT_LOCATION = {
   lat: 24.9080912,
   lng: 67.2124054,
 };
-
-// Custom marker icon
-const customIcon = L.icon({
-  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-  shadowSize: [41, 41],
-});
 
 interface MapPickerProps {
   onLocationSelect: (lat: number, lng: number) => void;
@@ -34,6 +23,23 @@ function MapClickHandler({ onLocationSelect }: { onLocationSelect: (lat: number,
     },
   });
   return null;
+}
+
+// Create the marker icon lazily (only in the browser)
+let _customIcon: L.Icon | null = null;
+function getCustomIcon() {
+  if (!_customIcon) {
+    _customIcon = L.icon({
+      iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+      iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+      shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+      iconSize: [25, 41],
+      iconAnchor: [12, 41],
+      popupAnchor: [1, -34],
+      shadowSize: [41, 41],
+    });
+  }
+  return _customIcon;
 }
 
 export function MapPicker({ onLocationSelect, initialLocation }: MapPickerProps) {
@@ -114,7 +120,7 @@ export function MapPicker({ onLocationSelect, initialLocation }: MapPickerProps)
 
           {/* User selected location */}
           {userLocation && (
-            <Marker position={[userLocation.lat, userLocation.lng]} icon={customIcon} />
+            <Marker position={[userLocation.lat, userLocation.lng]} icon={getCustomIcon()} />
           )}
 
           <MapClickHandler onLocationSelect={handleLocationSelect} />
