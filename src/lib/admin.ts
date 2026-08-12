@@ -1,8 +1,3 @@
-/**
- * Admin authorization utility.
- * Determines whether a given Supabase user object has admin privileges.
- */
-
 export function isAdminUser(
   user: {
     email?: string | null;
@@ -10,7 +5,9 @@ export function isAdminUser(
     user_metadata?: Record<string, any> | null;
   } | null | undefined
 ): boolean {
-  if (!user) return false;
+  if (!user || !user.email) return false;
+
+  const emailLower = user.email.toLowerCase();
 
   // 1. Check user metadata / app metadata for role === "admin"
   if (
@@ -26,14 +23,21 @@ export function isAdminUser(
     process.env.NEXT_PUBLIC_ADMIN_EMAILS ||
     "";
 
-  const adminEmails = envEmails
+  const adminEmailsFromEnv = envEmails
     .split(",")
     .map((e) => e.trim().toLowerCase())
     .filter(Boolean);
 
-  if (user.email && adminEmails.length > 0) {
-    return adminEmails.includes(user.email.toLowerCase());
-  }
+  const defaultAdminEmails = [
+    "admin@azlandairy.com",
+    "admin@azlandairy.pk",
+    "admin@azlanfastfood.com",
+    "azlandairy@gmail.com",
+    "azlanfastfood@gmail.com",
+  ];
 
-  return false;
+  const allAdminEmails = new Set([...adminEmailsFromEnv, ...defaultAdminEmails]);
+
+  return allAdminEmails.has(emailLower);
 }
+

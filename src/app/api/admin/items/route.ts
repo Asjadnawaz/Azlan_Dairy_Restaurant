@@ -1,20 +1,16 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { cookies } from "next/headers";
 import { isAdminUser } from "@/lib/admin";
 import { MENU_ITEMS } from "@/data/menu-data";
 
 async function verifyAdminAuth() {
-  const cookieStore = await cookies();
-  const adminCookie = cookieStore.get("admin_auth")?.value;
-
   const supabase = await createServerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  return adminCookie === "true" || Boolean(user && isAdminUser(user));
+  return Boolean(user && isAdminUser(user));
 }
 
 export async function GET() {

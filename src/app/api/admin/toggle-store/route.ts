@@ -1,22 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { cookies } from "next/headers";
 import { isAdminUser } from "@/lib/admin";
 
 export async function POST(req: NextRequest) {
   try {
     // ── 1. Authorize the caller ──
-    const cookieStore = await cookies();
-    const adminCookie = cookieStore.get("admin_auth")?.value;
-
     const supabase = await createServerClient();
     const {
       data: { user },
     } = await supabase.auth.getUser();
 
-    const isAuthorized =
-      adminCookie === "true" || (user && isAdminUser(user));
+    const isAuthorized = Boolean(user && isAdminUser(user));
 
     if (!isAuthorized) {
       return NextResponse.json(

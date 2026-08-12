@@ -23,16 +23,9 @@ export function LoginForm() {
     setLoading(true);
 
     const cleanEmail = email.trim().toLowerCase();
-    const isAdminEmail = cleanEmail.includes("admin") || cleanEmail.includes("azlandairy");
 
-    if (isAdminEmail && (password === "admin123" || password === "AzlanAdmin123!")) {
-      document.cookie = "admin_auth=true; path=/; max-age=86400";
-      toast.success("Welcome back, Admin!");
-      router.push(redirectPath);
-      router.refresh();
-      setLoading(false);
-      return;
-    }
+    // Clear legacy insecure cookie
+    document.cookie = "admin_auth=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT";
 
     try {
       const supabase = createBrowserClient();
@@ -53,8 +46,7 @@ export function LoginForm() {
           return;
         }
 
-        document.cookie = "admin_auth=true; path=/; max-age=86400";
-        toast.success("Welcome back!");
+        toast.success("Welcome back, Admin!");
         router.push(redirectPath);
         router.refresh();
       }

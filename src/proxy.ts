@@ -5,11 +5,10 @@ import { isAdminUser } from "@/lib/admin";
 /**
  * Proxy (Next.js 16 — formerly "Middleware"):
  * 1. Refreshes the Supabase auth session on every request (handles token expiry).
- * 2. Protects /admin/* routes (except /admin/login) — redirects to /admin/login
- *    if no authenticated admin user.
+ * 2. Protects /admin/* routes — strictly checks Supabase authenticated user's role.
  */
 export async function proxy(request: NextRequest) {
-  const response = NextResponse.next({
+  let response = NextResponse.next({
     request: { headers: request.headers },
   });
 
@@ -26,6 +25,12 @@ export async function proxy(request: NextRequest) {
         },
         setAll(cookiesToSet) {
           cookiesToSet.forEach(({ name, value, options }) => {
+            request.cookies.set(name, value);
+          });
+          response = NextResponse.next({
+            request,
+          });
+          cookiesToSet.forEach(({ name, value, options }) => {
             response.cookies.set(name, value, options);
           });
         },
@@ -33,23 +38,27 @@ export async function proxy(request: NextRequest) {
     }
   );
 
-  // Refresh session tokens
+  // Refresh session tokens & get verified user
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   const pathname = request.nextUrl.pathname;
 
-  // Protect /admin routes (except the login page itself)
   const isAdminRoute = pathname.startsWith("/admin");
   const isLoginRoute = pathname === "/admin/login";
-  const adminAuthCookie = request.cookies.get("admin_auth")?.value === "true";
-  const isUserAdmin = isAdminUser(user) || adminAuthCookie;
 
+  // Strict RBAC: Check if current authenticated user has Admin rights
+  const isUserAdmin = isAdminUser(user);
+
+  // If attempting to access admin route (other than login) without admin privileges -> redirect to /admin/login
   if (isAdminRoute && !isLoginRoute && !isUserAdmin) {
-    return NextResponse.redirect(new URL("/", request.url));
+    const loginUrl = new URL("/admin/login", request.url);
+    loginUrl.searchParams.set("error", "unauthorized");
+    return NextResponse.redirect(loginUrl);
   }
 
+  // If visiting /admin/login while ALREADY authenticated as an Admin -> redirect to dashboard
   if (isLoginRoute && isUserAdmin) {
     return NextResponse.redirect(new URL("/admin/orders", request.url));
   }
@@ -67,3 +76,4 @@ export async function proxy(request: NextRequest) {
 export const config = {
   matcher: ["/admin/:path*"],
 };
+

@@ -1,14 +1,21 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { isAdminUser } from "@/lib/admin";
 
 export async function GET() {
   try {
     const cookieStore = await cookies();
     const riderAuth = cookieStore.get("rider_auth")?.value === "true";
-    const adminAuth = cookieStore.get("admin_auth")?.value === "true";
 
-    if (!riderAuth && !adminAuth) {
+    const supabase = await createServerClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    const isUserAdmin = Boolean(user && isAdminUser(user));
+
+    if (!riderAuth && !isUserAdmin) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 

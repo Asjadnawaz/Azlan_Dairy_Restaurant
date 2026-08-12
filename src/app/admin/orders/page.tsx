@@ -1,4 +1,3 @@
-import { cookies } from "next/headers";
 import { createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
@@ -11,16 +10,14 @@ export const dynamic = "force-dynamic";
 
 export default async function AdminOrdersPage() {
   const supabase = await createServerClient();
-  const cookieStore = await cookies();
-  const isCookieAdmin = cookieStore.get("admin_auth")?.value === "true";
 
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Server-side RBAC check — non-admins are silently redirected to home
-  if (!isCookieAdmin && (!user || !isAdminUser(user))) {
-    redirect("/");
+  // Strict Server-side RBAC check — non-admins are redirected to login with error
+  if (!user || !isAdminUser(user)) {
+    redirect("/admin/login?error=unauthorized");
   }
 
   // Use admin client (service role) to bypass RLS and fetch all orders
@@ -54,8 +51,9 @@ export default async function AdminOrdersPage() {
       initialOrders={orders}
       initialLineItems={lineItems}
       settings={(settingsData as Settings) ?? null}
-      userEmail={user?.email ?? "admin@azlandairy.com"}
+      userEmail={user.email ?? "admin@azlandairy.com"}
       signOutButton={<SignOutButton />}
     />
   );
 }
+
