@@ -206,3 +206,43 @@ export async function fetchRouteGeometry(
 export function getRestaurantLocation() {
   return RESTAURANT_LOCATION;
 }
+
+/**
+ * Perform reverse geocoding from lat/lng to human readable address details
+ */
+export async function reverseGeocode(
+  lat: number,
+  lng: number
+): Promise<{
+  address: string;
+  city: string;
+  district: string;
+} | null> {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`,
+      {
+        headers: {
+          "Accept-Language": "en-US,en;q=0.9",
+        },
+      }
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data || !data.address) return null;
+
+    const addr = data.address;
+    const city = addr.city || addr.town || addr.village || addr.city_district || "Karachi";
+    const district = addr.county || addr.suburb || addr.state_district || addr.neighbourhood || "Malir District";
+    const displayAddress = data.display_name || `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+
+    return {
+      address: displayAddress,
+      city,
+      district,
+    };
+  } catch (err) {
+    console.warn("Reverse geocode failed:", err);
+    return null;
+  }
+}

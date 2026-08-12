@@ -5,7 +5,7 @@ import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useCart } from "@/lib/cart-store";
 import { toast } from "sonner";
-import { calculateDeliveryFromCoordinates, fetchRoadRoute } from "@/lib/delivery";
+import { calculateDeliveryFromCoordinates, fetchRoadRoute, reverseGeocode } from "@/lib/delivery";
 
 // Leaflet accesses `window` at import time — must be loaded client-only
 const MapPicker = dynamic(
@@ -38,9 +38,10 @@ export default function CartPage() {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("03");
   const [orderType, setOrderType] = useState<"delivery" | "pickup">("delivery");
-  const [address, setAddress] = useState("Khokhrapar, Sabir Colony, Malir Town, Malir District, Karachi Division, Sindh, 75080, Pakistan");
+  const [address, setAddress] = useState("");
   const [city, setCity] = useState("Karachi");
-  const [district, setDistrict] = useState("Malir District");
+  const [district, setDistrict] = useState("");
+  const [isGeocoding, setIsGeocoding] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<"cod" | "bank_transfer">("cod");
   const [itemUnavailableAction, setItemUnavailableAction] = useState<"Call me" | "Cancel entire order">("Call me");
   const [note, setNote] = useState("");
@@ -130,18 +131,30 @@ export default function CartPage() {
 
   const handleLocationSelect = async (lat: number, lng: number) => {
     setDeliveryLocation({ lat, lng });
+    setIsGeocoding(true);
 
     // Immediately show Haversine estimate while OSRM loads
     const fallback = calculateDeliveryFromCoordinates(lat, lng);
     setDeliveryDistance(fallback.distanceKm);
     setDeliveryFee(fallback.deliveryFee);
-    setDeliveryBreakdown(fallback.breakdown + " (calculating road route…)");
+    setDeliveryBreakdown(fallback.breakdown + " (calculating road route & address…)");
 
-    // Fetch accurate road-based distance from OSRM
-    const route = await fetchRoadRoute(lat, lng);
+    // Fetch road route and reverse geocode in parallel
+    const [route, geoResult] = await Promise.all([
+      fetchRoadRoute(lat, lng),
+      reverseGeocode(lat, lng),
+    ]);
+
     setDeliveryDistance(route.distanceKm);
     setDeliveryFee(route.deliveryFee);
     setDeliveryBreakdown(route.breakdown);
+
+    if (geoResult) {
+      setAddress(geoResult.address);
+      if (geoResult.city) setCity(geoResult.city);
+      if (geoResult.district) setDistrict(geoResult.district);
+    }
+    setIsGeocoding(false);
 
     if (route.distanceKm > 5.0) {
       toast.error(
@@ -691,9 +704,13 @@ export default function CartPage() {
                   </div>
 
                   <div className="flex items-center justify-between text-xs text-slate-500 bg-blue-50/50 p-2.5 rounded-xl border border-blue-100">
-                    <span>GPS coordinates captured. You can adjust the address if needed.</span>
-                    <span className="shrink-0 px-2 py-0.5 rounded bg-blue-100 text-blue-700 font-bold text-[10px]">
-                      GPS Location
+                    <span>
+                      {isGeocoding
+                        ? "Fetching address details from map pin..."
+                        : "Click anywhere on the map below or use GPS to automatically detect your address."}
+                    </span>
+                    <span className="shrink-0 px-2 py-0.5 rounded bg-blue-100 text-blue-700 font-bold text-[10px] flex items-center gap-1">
+                      {isGeocoding ? "Locating..." : "Dynamic Pin Address"}
                     </span>
                   </div>
 
@@ -702,7 +719,7 @@ export default function CartPage() {
                       type="text"
                       value={address}
                       onChange={(e) => setAddress(e.target.value)}
-                      placeholder="Street address / House #"
+                      placeholder={isGeocoding ? "Detecting address..." : "Street address / House # (auto-detected from map pin)"}
                       className="w-full h-12 rounded-xl bg-slate-100/80 border border-slate-200 px-4 text-sm font-medium focus:outline-none focus:border-slate-950 focus:bg-white transition-all"
                     />
                   </div>
