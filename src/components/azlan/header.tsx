@@ -70,7 +70,8 @@ export function Header() {
     const onScroll = () => {
       if (!ticking) {
         window.requestAnimationFrame(() => {
-          setScrolled(window.scrollY > 10);
+          const isScrolled = window.scrollY > 10;
+          setScrolled((prev) => (prev !== isScrolled ? isScrolled : prev));
           ticking = false;
         });
         ticking = true;
@@ -274,12 +275,12 @@ export function Header() {
       {/* Mobile drawer */}
       {mobileOpen && (
         <div
-          className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-sm animate-fade-in lg:hidden flex justify-end"
+          className="fixed inset-0 z-[9999] bg-black/65 animate-fade-in lg:hidden flex justify-end transform-gpu"
           onClick={(e) => {
             if (e.target === e.currentTarget) setMobileOpen(false);
           }}
         >
-          <div className="w-80 max-w-[85vw] h-full bg-[var(--color-surface-container-lowest)] text-[var(--color-on-surface)] p-6 shadow-2xl animate-slide-left slim-scrollbar overflow-y-auto flex flex-col justify-between border-l border-[var(--color-outline-variant)]/50">
+          <div className="w-80 max-w-[85vw] h-full bg-[var(--color-surface-container-lowest)] text-[var(--color-on-surface)] p-6 shadow-2xl animate-slide-left slim-scrollbar overflow-y-auto flex flex-col justify-between border-l border-[var(--color-outline-variant)]/50 transform-gpu">
             <div>
               {/* Drawer header — branded */}
               <div className="flex items-center justify-between pb-5 mb-5 border-b border-slate-100">

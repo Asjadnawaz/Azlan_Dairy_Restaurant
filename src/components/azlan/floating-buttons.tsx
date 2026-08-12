@@ -14,7 +14,8 @@ export function FloatingButtons() {
     const onScroll = () => {
       if (!ticking) {
         window.requestAnimationFrame(() => {
-          setShow(window.scrollY > 500);
+          const isShow = window.scrollY > 500;
+          setShow((prev) => (prev !== isShow ? isShow : prev));
           ticking = false;
         });
         ticking = true;
@@ -26,7 +27,7 @@ export function FloatingButtons() {
 
   return (
     <div
-      className={`fixed bottom-5 right-5 sm:bottom-6 sm:right-6 z-40 flex flex-col gap-3 items-end transition-all duration-300 ${
+      className={`fixed bottom-5 right-5 sm:bottom-6 sm:right-6 z-40 flex flex-col gap-3 items-end transition-all duration-300 transform-gpu ${
         show
           ? "opacity-100 scale-100 translate-y-0 visible"
           : "opacity-0 scale-0 translate-y-12 pointer-events-none invisible"

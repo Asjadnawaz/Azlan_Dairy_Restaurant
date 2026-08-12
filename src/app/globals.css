@@ -96,6 +96,8 @@ html {
   scroll-behavior: smooth;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  -webkit-tap-highlight-color: transparent;
 }
 
 body {
@@ -103,6 +105,8 @@ body {
   color: var(--color-on-surface);
   background-color: var(--color-background);
   min-height: 100vh;
+  touch-action: manipulation;
+  overflow-x: hidden;
 }
 
 /* =========================================
