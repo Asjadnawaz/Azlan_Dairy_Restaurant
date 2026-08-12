@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 const STATS = [
   { value: "2+", label: "Years Serving Malir" },
   { value: "50+", label: "Menu Items" },
@@ -64,7 +66,7 @@ export function AboutSection() {
               with real, fresh ingredients — without compromise.
             </p>
             <p className="text-base text-[var(--color-on-surface-variant)] leading-relaxed">
-              From our very first Zinger Burger to today's full menu of Pizzas,
+              From our very first Zinger Burger to today&apos;s full menu of Pizzas,
               Rolls and more, we put the same passion and care into
               every single plate. No shortcuts. No frozen shortcuts. Just bold,
               honest food cooked fresh — and delivered hot.
@@ -171,7 +173,7 @@ export function AboutSection() {
 
           {/* CTA */}
           <div className="mt-12 flex justify-center">
-            <a
+            <Link
               href="/#menu"
               className="inline-flex items-center gap-2 px-8 py-4 rounded-full font-extrabold text-base transition-all duration-200 hover:brightness-110 hover:-translate-y-0.5"
               style={{
@@ -184,7 +186,7 @@ export function AboutSection() {
                 restaurant_menu
               </span>
               See Our Full Menu
-            </a>
+            </Link>
           </div>
         </div>
       </div>

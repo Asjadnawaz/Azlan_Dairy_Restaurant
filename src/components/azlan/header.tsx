@@ -2,35 +2,22 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { useRouter, usePathname } from "next/navigation";
+import { usePathname } from "next/navigation";
+import Image from "next/image";
+import type { User } from "@supabase/supabase-js";
 import { useCart } from "@/lib/cart-store";
 import { AuthModal } from "./auth-modal";
 import { getCurrentUser, signOut, onAuthStateChange } from "@/lib/supabase/auth";
+import { isAdminUser } from "@/lib/admin";
 import { toast } from "sonner";
-
-const CATEGORIES = [
-  "Signature",
-  "Broast",
-  "Burgers",
-  "Rolls & Wraps",
-  "BBQ",
-  "Sides",
-  "Beverages",
-];
-
-function slugify(s: string) {
-  return s.toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-}
 
 export function Header() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
-  const [user, setUser] = useState<{ id: string; email?: string; user_metadata?: { full_name?: string; avatar_url?: string } } | null>(null);
+  const [user, setUser] = useState<User | null>(null);
   const totalItems = useCart((s) => s.totalItems());
-  const openCart = useCart((s) => s.open);
   const hasHydrated = useCart((s) => s._hasHydrated);
-  const router = useRouter();
   const pathname = usePathname();
 
   /**
@@ -107,16 +94,18 @@ export function Header() {
       await signOut();
       setUser(null);
       toast.success("Logged out successfully");
-    } catch (error) {
+    } catch {
       toast.error("Failed to logout");
     }
   };
 
-  const handleAuthSuccess = (userId: string) => {
-    getCurrentUser().then((currentUser) => {
-      setUser(currentUser);
-      setShowAuthModal(false);
-    });
+  const handleAuthSuccess = () => {
+    void getCurrentUser()
+      .then((currentUser) => {
+        setUser(currentUser);
+        setShowAuthModal(false);
+      })
+      .catch(() => toast.error("Unable to refresh your profile."));
   };
 
   return (
@@ -129,33 +118,34 @@ export function Header() {
         }
         bg-white/90 backdrop-blur-xl`}
       >
-        <div className="relative mx-auto flex h-[72px] max-w-7xl items-center justify-between px-4 md:px-8">
+        <div className="relative mx-auto flex h-[clamp(3.5rem,17vw,4.5rem)] max-w-7xl items-center justify-between gap-2 px-[clamp(0.625rem,4vw,1rem)] md:h-[72px] md:px-8">
 
           {/* ── LOGO + BRAND ── */}
-          <Link href="/" className="group flex items-center gap-3.5 shrink-0">
+          <Link href="/" className="group flex min-w-0 items-center gap-[clamp(0.45rem,2.5vw,0.875rem)] shrink">
             {/* Glow-halo logo container */}
             <div className="relative flex items-center justify-center shrink-0">
               {/* Ambient glow ring */}
               <div className="absolute -inset-1 rounded-full bg-gradient-to-br from-emerald-500/30 to-amber-400/20 blur-sm opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-              <img
+              <Image
                 src="/images/logo.png"
                 alt="Azlan Fast Food and BBQ point"
                 width={48}
                 height={48}
-                className="relative h-12 w-12 rounded-full object-cover ring-2 ring-white shadow-md group-hover:shadow-emerald-200 group-hover:scale-[1.06] transition-all duration-300"
+                sizes="48px"
+                className="relative h-[clamp(2rem,11vw,3rem)] w-[clamp(2rem,11vw,3rem)] rounded-full object-cover ring-2 ring-white shadow-md group-hover:shadow-emerald-200 group-hover:scale-[1.06] transition-all duration-300"
               />
             </div>
 
             {/* Typography block */}
-            <div className="flex flex-col justify-center leading-none gap-[5px]">
-              <div className="flex items-center gap-1.5">
-                <span className="font-integral text-[22px] sm:text-[24px] tracking-wide text-[var(--color-primary)] leading-none uppercase group-hover:text-emerald-800 transition-colors duration-300">
+            <div className="flex min-w-0 flex-col justify-center leading-none gap-[clamp(0.15rem,1vw,0.3125rem)]">
+              <div className="flex min-w-0 items-center gap-1.5">
+                <span className="font-integral text-[clamp(1rem,6vw,1.5rem)] tracking-wide text-[var(--color-primary)] leading-none uppercase group-hover:text-emerald-800 transition-colors duration-300">
                   Azlan
                 </span>
                 {/* Gold accent pip — luxury detail */}
                 <span className="w-[6px] h-[6px] rounded-full bg-[#FFC700] shadow-sm shrink-0 mb-0.5" />
               </div>
-              <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.26em] text-slate-400 leading-none group-hover:text-slate-600 transition-colors duration-300">
+              <span className="max-[380px]:hidden text-[clamp(0.4rem,2.5vw,0.625rem)] font-bold uppercase tracking-[0.18em] sm:tracking-[0.26em] text-slate-400 leading-none group-hover:text-slate-600 transition-colors duration-300 whitespace-nowrap">
                 Fast Food & BBQ Point
               </span>
             </div>
@@ -181,8 +171,9 @@ export function Header() {
           </nav>
 
           {/* ── ACTIONS ── */}
-          <div className="flex items-center gap-1.5">
+          <div className="flex shrink-0 items-center gap-[clamp(0.125rem,1.5vw,0.375rem)]">
             {/* Auth Button or User Profile */}
+            <div className="hidden md:block">
             {user ? (
               <div className="relative group">
                 <button
@@ -190,7 +181,7 @@ export function Header() {
                   aria-label="User menu"
                 >
                   {user.user_metadata?.avatar_url ? (
-                    <img src={user.user_metadata.avatar_url} alt="Profile" className="w-8 h-8 rounded-full object-cover ring-1 ring-white" />
+                    <Image src={user.user_metadata.avatar_url} alt="Profile" width={32} height={32} sizes="32px" className="w-8 h-8 rounded-full object-cover ring-1 ring-white" />
                   ) : (
                     <div className="w-8 h-8 rounded-full bg-[var(--color-primary)] flex items-center justify-center text-white font-bold text-sm ring-1 ring-emerald-700/20">
                       {user.user_metadata?.full_name?.charAt(0) || user.email?.charAt(0) || 'U'}
@@ -207,6 +198,15 @@ export function Header() {
                 {/* Dropdown */}
                 <div className="absolute right-0 top-full mt-2 w-52 bg-white rounded-2xl shadow-xl border border-slate-100 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 overflow-hidden">
                   <div className="py-1.5">
+                    {isAdminUser(user) && (
+                      <Link
+                        href="/admin/orders"
+                        className="flex items-center gap-3 px-4 py-2.5 text-sm font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 transition-colors"
+                      >
+                        <span className="material-symbols-outlined text-[20px] text-[var(--color-primary)]">admin_panel_settings</span>
+                        Admin Dashboard
+                      </Link>
+                    )}
                     <Link
                       href="/profile/edit"
                       className="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-emerald-50 hover:text-[var(--color-primary)] transition-colors"
@@ -241,14 +241,15 @@ export function Header() {
                 <span className="hidden sm:inline">Sign In</span>
               </button>
             )}
+            </div>
 
             {/* Cart */}
             <Link
               href="/cart"
-              className="relative p-2.5 rounded-full hover:bg-emerald-50 transition-all duration-200 group/cart"
+              className="relative p-[clamp(0.4rem,2.5vw,0.625rem)] rounded-full hover:bg-emerald-50 transition-all duration-200 group/cart"
               aria-label="View cart"
             >
-              <span className="material-symbols-outlined text-[22px] text-slate-600 group-hover/cart:text-[var(--color-primary)] transition-colors">
+              <span className="material-symbols-outlined text-[clamp(1.05rem,5.5vw,1.375rem)] text-slate-600 group-hover/cart:text-[var(--color-primary)] transition-colors">
                 shopping_cart
               </span>
               {hasHydrated && totalItems > 0 && (
@@ -260,11 +261,11 @@ export function Header() {
 
             {/* Mobile hamburger */}
             <button
-              className="lg:hidden p-2.5 rounded-full hover:bg-emerald-50 transition-colors"
+              className="lg:hidden p-[clamp(0.4rem,2.5vw,0.625rem)] rounded-full hover:bg-emerald-50 transition-colors"
               onClick={() => setMobileOpen(!mobileOpen)}
               aria-label="Toggle menu"
             >
-              <span className="material-symbols-outlined text-[22px] text-slate-600">
+              <span className="material-symbols-outlined text-[clamp(1.05rem,5.5vw,1.375rem)] text-slate-600">
                 {mobileOpen ? "close" : "menu"}
               </span>
             </button>
@@ -286,9 +287,12 @@ export function Header() {
               <div className="flex items-center justify-between pb-5 mb-5 border-b border-slate-100">
                 <div className="flex items-center gap-3">
                   <div className="relative shrink-0">
-                    <img
+                    <Image
                       src="/images/logo.png"
                       alt="Azlan Logo"
+                      width={44}
+                      height={44}
+                      sizes="44px"
                       className="w-11 h-11 rounded-full object-cover ring-2 ring-white shadow-md"
                     />
                     <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-[#FFC700] ring-2 ring-white" />
@@ -341,12 +345,12 @@ export function Header() {
             </div>
 
             {/* Mobile Auth Section */}
-            <div className="pt-4 border-t border-[var(--color-outline-variant)]/40 mt-6">
+            <div className="md:hidden pt-4 border-t border-[var(--color-outline-variant)]/40 mt-6">
               {user ? (
                 <div className="space-y-2">
                   <div className="flex items-center gap-3 px-3 py-2.5 bg-[var(--color-surface-container-low)] rounded-xl border border-[var(--color-outline-variant)]/30">
                     {user.user_metadata?.avatar_url ? (
-                      <img src={user.user_metadata.avatar_url} alt="Profile" className="w-9 h-9 rounded-full object-cover" />
+                      <Image src={user.user_metadata.avatar_url} alt="Profile" width={36} height={36} sizes="36px" className="w-9 h-9 rounded-full object-cover" />
                     ) : (
                       <div className="w-9 h-9 rounded-full bg-[var(--color-primary)] flex items-center justify-center text-white font-bold text-sm">
                         {user.user_metadata?.full_name?.charAt(0) || user.email?.charAt(0) || 'U'}
@@ -361,6 +365,16 @@ export function Header() {
                       </p>
                     </div>
                   </div>
+                  {isAdminUser(user) && (
+                    <Link
+                      href="/admin/orders"
+                      onClick={() => setMobileOpen(false)}
+                      className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-emerald-900 bg-emerald-50 border border-emerald-200 transition-colors"
+                    >
+                      <span className="material-symbols-outlined text-[20px] text-[var(--color-primary)]">admin_panel_settings</span>
+                      Admin Dashboard
+                    </Link>
+                  )}
                   <Link
                     href="/profile/edit"
                     onClick={() => setMobileOpen(false)}

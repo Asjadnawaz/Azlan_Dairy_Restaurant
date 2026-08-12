@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import localFont from "next/font/local";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import { ThemeProvider } from "@/components/azlan/theme-provider";
 import { Toaster } from "sonner";
@@ -10,6 +11,12 @@ const plusJakarta = Plus_Jakarta_Sans({
   variable: "--font-jakarta",
   subsets: ["latin"],
   weight: ["400", "500", "600", "700", "800"],
+  display: "swap",
+});
+
+const integralCf = localFont({
+  src: "../../public/fonts/Demo_Fonts/Fontspring-DEMO-integralcf-bold.otf",
+  variable: "--font-integral",
   display: "swap",
 });
 
@@ -144,23 +151,13 @@ export default async function RootLayout({
   return (
     <html
       lang="en"
-      className={`${plusJakarta.variable} h-full antialiased`}
+      className={`${plusJakarta.variable} ${integralCf.variable} h-full antialiased`}
       suppressHydrationWarning
     >
       <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link
           rel="stylesheet"
           href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap"
-        />
-        <link
-          rel="stylesheet"
-          href="https://fonts.cdnfonts.com/css/integral-cf"
-        />
-        <link
-          rel="stylesheet"
-          href="https://fonts.cdnfonts.com/css/jameel-noori-nastaliq"
         />
         <script
           type="application/ld+json"

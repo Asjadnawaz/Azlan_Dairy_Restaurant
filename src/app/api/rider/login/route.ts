@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
+import { getErrorMessage } from "@/lib/utils";
 
 export async function POST(req: Request) {
   try {
-    const { passcode } = await req.json();
+    const { passcode } = (await req.json()) as { passcode?: unknown };
     const validPasscode = process.env.RIDER_PASSCODE || "1234";
 
-    if (!passcode || passcode.trim() !== validPasscode) {
+    if (typeof passcode !== "string" || passcode.trim() !== validPasscode) {
       return NextResponse.json(
         { error: "Invalid Rider Passcode" },
         { status: 401 }
@@ -20,9 +21,9 @@ export async function POST(req: Request) {
     });
 
     return response;
-  } catch (err: any) {
+  } catch (error: unknown) {
     return NextResponse.json(
-      { error: err.message || "Login failed" },
+      { error: getErrorMessage(error, "Login failed") },
       { status: 500 }
     );
   }

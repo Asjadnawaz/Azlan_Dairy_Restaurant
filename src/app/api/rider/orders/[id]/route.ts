@@ -3,6 +3,8 @@ import { cookies } from "next/headers";
 import { createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdminUser } from "@/lib/admin";
+import { getErrorMessage } from "@/lib/utils";
+import type { OrderStatus } from "@/lib/supabase/database.types";
 
 export async function PATCH(
   req: Request,
@@ -23,8 +25,7 @@ export async function PATCH(
     }
 
     const { id } = await params;
-    const body = await req.json();
-    const { status } = body;
+    const { status } = (await req.json()) as { status?: unknown };
 
     if (!id || !status) {
       return NextResponse.json(
@@ -33,15 +34,15 @@ export async function PATCH(
       );
     }
 
-    const validStatuses = ["delivering", "completed"];
-    if (!validStatuses.includes(status)) {
+    const validStatuses: OrderStatus[] = ["delivering", "completed"];
+    if (typeof status !== "string" || !validStatuses.includes(status as OrderStatus)) {
       return NextResponse.json(
         { error: "Invalid status transition for rider" },
         { status: 400 }
       );
     }
 
-    const updates: Record<string, any> = {
+    const updates: Record<string, unknown> = {
       status,
       updated_at: new Date().toISOString(),
     };
@@ -65,7 +66,10 @@ export async function PATCH(
     }
 
     return NextResponse.json({ success: true, order: updatedOrder });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Server error" }, { status: 500 });
+  } catch (error: unknown) {
+    return NextResponse.json(
+      { error: getErrorMessage(error, "Server error") },
+      { status: 500 }
+    );
   }
 }

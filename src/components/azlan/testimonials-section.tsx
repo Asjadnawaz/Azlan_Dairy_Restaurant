@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Image from "next/image";
 
 const REVIEWS = [
   {
@@ -95,9 +96,11 @@ export function TestimonialsSection() {
                   onClick={() => setSelectedImage(rev.src)}
                   className="w-full shrink-0 flex items-center justify-center cursor-pointer px-1"
                 >
-                  <img
+                  <Image
                     src={rev.src}
                     alt={rev.alt}
+                    width={800}
+                    height={600}
                     loading="lazy"
                     decoding="async"
                     className="max-h-[220px] sm:max-h-[260px] w-auto object-contain rounded-lg hover:scale-[1.02] transition-transform duration-200"
@@ -149,9 +152,11 @@ export function TestimonialsSection() {
             </div>
 
             <div className="max-h-[75vh] overflow-y-auto flex items-center justify-center p-2 rounded-xl bg-zinc-50">
-              <img
+              <Image
                 src={selectedImage}
                 alt="Google Maps Review Screenshot"
+                width={800}
+                height={600}
                 className="max-h-[70vh] w-auto object-contain rounded-lg shadow-md"
               />
             </div>

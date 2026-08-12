@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Image from "next/image";
+import type { User } from "@supabase/supabase-js";
 import { useCart } from "@/lib/cart-store";
 import { toast } from "sonner";
 import { MapPicker } from "./map-picker";
@@ -25,6 +27,7 @@ export function CartDrawer({ isStoreActive }: CartDrawerProps) {
     totalPrice,
     totalItems,
   } = useCart();
+  const hasHydrated = useCart((state) => state._hasHydrated);
 
   const [form, setForm] = useState({
     name: "",
@@ -39,7 +42,6 @@ export function CartDrawer({ isStoreActive }: CartDrawerProps) {
   const [deliveryDistance, setDeliveryDistance] = useState(0);
   const [deliveryBreakdown, setDeliveryBreakdown] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [mounted, setMounted] = useState(false);
   const [confirmed, setConfirmed] = useState<{
     orderId: string;
     orderNumber: string;
@@ -51,7 +53,6 @@ export function CartDrawer({ isStoreActive }: CartDrawerProps) {
   } | null>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState<"cod" | "online">("cod");
   const [itemUnavailableAction, setItemUnavailableAction] = useState<"Call me" | "Cancel entire order">("Call me");
 
   // Save order to localStorage after successful placement
@@ -69,10 +70,8 @@ export function CartDrawer({ isStoreActive }: CartDrawerProps) {
   };
 
   useEffect(() => {
-    setMounted(true);
     // Check for existing auth session
-    const prefillUser = (u: any) => {
-      if (!u) return;
+    const prefillUser = (u: User) => {
       setUserId(u.id);
       
       const meta = u.user_metadata || {};
@@ -271,7 +270,7 @@ export function CartDrawer({ isStoreActive }: CartDrawerProps) {
   }
 
   // Avoid SSR rendering the drawer
-  if (!mounted) return null;
+  if (!hasHydrated) return null;
 
   return (
     <>
@@ -348,9 +347,12 @@ export function CartDrawer({ isStoreActive }: CartDrawerProps) {
                     key={item.id}
                     className="flex gap-3 p-3 rounded-[var(--radius-lg)] bg-[var(--color-surface-container-low)]"
                   >
-                    <img
+                    <Image
                       src={item.image_path || "/images/burger.jpg"}
                       alt={item.name}
+                      width={64}
+                      height={64}
+                      sizes="64px"
                       className="w-16 h-16 rounded-[var(--radius-md)] object-cover shrink-0"
                     />
                     <div className="flex-1 min-w-0">
@@ -513,7 +515,7 @@ export function CartDrawer({ isStoreActive }: CartDrawerProps) {
                 />
               </div>
               <p className="text-xs text-slate-500 font-medium px-2 -mt-2">
-                Please edit your profile so that you don't need to enter your personal details again and again.
+                Please edit your profile so that you don&apos;t need to enter your personal details again and again.
               </p>
               <div>
                 <label className="block text-sm font-semibold mb-1.5">Delivery Address *</label>

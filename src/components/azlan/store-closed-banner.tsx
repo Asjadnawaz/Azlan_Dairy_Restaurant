@@ -5,11 +5,7 @@ import { createBrowserClient } from "@/lib/supabase/client";
 import type { Settings } from "@/lib/supabase/database.types";
 
 export function StoreClosedBanner({ isActive }: { isActive: boolean }) {
-  const [storeActive, setStoreActive] = useState<boolean>(isActive);
-
-  useEffect(() => {
-    setStoreActive(isActive);
-  }, [isActive]);
+  const [storeStatusOverride, setStoreStatusOverride] = useState<boolean | null>(null);
 
   // Fetch current status directly from DB
   const fetchStatus = useCallback(async () => {
@@ -21,7 +17,7 @@ export function StoreClosedBanner({ isActive }: { isActive: boolean }) {
         .eq("id", 1)
         .single();
       if (data && typeof data.is_active === "boolean") {
-        setStoreActive(data.is_active);
+        setStoreStatusOverride(data.is_active);
       }
     } catch {
       // Silent fallback
@@ -30,7 +26,9 @@ export function StoreClosedBanner({ isActive }: { isActive: boolean }) {
 
   useEffect(() => {
     // Fetch fresh status on mount
-    fetchStatus();
+    void (async () => {
+      await fetchStatus();
+    })();
 
     // Subscribe to Realtime changes
     const supabase = createBrowserClient();
@@ -42,7 +40,7 @@ export function StoreClosedBanner({ isActive }: { isActive: boolean }) {
         (payload) => {
           const updated = payload.new as Settings;
           if (updated && typeof updated.is_active === "boolean") {
-            setStoreActive(updated.is_active);
+            setStoreStatusOverride(updated.is_active);
           }
         }
       )
@@ -57,7 +55,7 @@ export function StoreClosedBanner({ isActive }: { isActive: boolean }) {
     };
   }, [fetchStatus]);
 
-  if (storeActive) return null;
+  if (storeStatusOverride ?? isActive) return null;
 
   return (
     <div

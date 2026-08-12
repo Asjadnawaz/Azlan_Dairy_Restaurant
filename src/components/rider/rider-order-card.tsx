@@ -1,10 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import Image from "next/image";
-import { MENU_ITEMS } from "@/data/menu-data";
 import type { Order, OrderItem } from "@/lib/supabase/database.types";
 import { toast } from "sonner";
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
 
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -79,8 +81,8 @@ export function RiderOrderCard({
 
       toast.success(`Order #${order.order_number} marked as Delivered! 🎉`);
       onStatusUpdated();
-    } catch (err: any) {
-      toast.error(err.message || "Failed to update order status");
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, "Failed to update order status"));
     } finally {
       setUpdating(false);
     }

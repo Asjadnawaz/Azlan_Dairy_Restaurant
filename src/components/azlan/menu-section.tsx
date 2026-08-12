@@ -17,12 +17,8 @@ export function MenuSection({
   items: Item[];
   isStoreActive: boolean;
 }) {
-  const [menuItems, setMenuItems] = useState<Item[]>(initialItems);
-
-  // Keep local state in sync if initialItems prop updates
-  useEffect(() => {
-    setMenuItems(initialItems);
-  }, [initialItems]);
+  const [realtimeItems, setRealtimeItems] = useState<Item[] | null>(null);
+  const menuItems = realtimeItems ?? initialItems;
 
   // Realtime listener for live price changes & availability
   useEffect(() => {
@@ -34,8 +30,10 @@ export function MenuSection({
         { event: "UPDATE", schema: "public", table: "items" },
         (payload) => {
           const updated = payload.new as Item;
-          setMenuItems((prev) =>
-            prev.map((item) => (item.id === updated.id ? { ...item, ...updated } : item))
+          setRealtimeItems((previousItems) =>
+            (previousItems ?? initialItems).map((item) =>
+              item.id === updated.id ? { ...item, ...updated } : item
+            )
           );
         }
       )
@@ -44,7 +42,7 @@ export function MenuSection({
         { event: "INSERT", schema: "public", table: "items" },
         (payload) => {
           const newItem = payload.new as Item;
-          setMenuItems((prev) => [...prev, newItem]);
+          setRealtimeItems((previousItems) => [...(previousItems ?? initialItems), newItem]);
         }
       )
       .subscribe();
@@ -52,7 +50,7 @@ export function MenuSection({
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [initialItems]);
 
   // Group items by category preserves natural menu order
   const categoryNames = Array.from(new Set(menuItems.map((i) => i.category)));

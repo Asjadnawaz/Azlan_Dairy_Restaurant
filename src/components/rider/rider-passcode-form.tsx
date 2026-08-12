@@ -3,6 +3,10 @@
 import { useState } from "react";
 import { toast } from "sonner";
 
+function getErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
+
 export function RiderPasscodeForm({ onSuccess }: { onSuccess: () => void }) {
   const [passcode, setPasscode] = useState("");
   const [loading, setLoading] = useState(false);
@@ -33,8 +37,8 @@ export function RiderPasscodeForm({ onSuccess }: { onSuccess: () => void }) {
 
       toast.success("Rider Authentication Successful!");
       onSuccess();
-    } catch (err: any) {
-      toast.error(err.message || "Authentication failed");
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, "Authentication failed"));
     } finally {
       setLoading(false);
     }

@@ -5,6 +5,10 @@ import { MENU_ITEMS } from "@/data/menu-data";
 import type { Order, OrderItem, OrderStatus } from "@/lib/supabase/database.types";
 import { toast } from "sonner";
 
+function getErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
+
 const OrderMap = dynamic(() => import("./order-map"), {
   ssr: false,
   loading: () => <div className="w-full h-40 bg-slate-100 animate-pulse rounded-[var(--radius-lg)]"></div>
@@ -137,8 +141,8 @@ export function OrderCard({
       toast.success(
         `Order ${order.order_number} → ${STATUS_CONFIG[newStatus].label}`
       );
-    } catch (err: any) {
-      toast.error(err.message || "Failed to update order status");
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, "Failed to update order status"));
     } finally {
       setUpdating(false);
     }

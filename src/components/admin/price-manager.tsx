@@ -1,9 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Image from "next/image";
 import type { Item } from "@/lib/supabase/database.types";
 import { toast } from "sonner";
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
 
 export function PriceManager() {
   const [items, setItems] = useState<Item[]>([]);
@@ -13,11 +17,7 @@ export function PriceManager() {
   const [editingPrices, setEditingPrices] = useState<Record<string, number>>({});
   const [savingIds, setSavingIds] = useState<Set<string>>(new Set());
 
-  useEffect(() => {
-    fetchItems();
-  }, []);
-
-  async function fetchItems() {
+  const fetchItems = useCallback(async () => {
     try {
       setLoading(true);
       const res = await fetch("/api/admin/items");
@@ -26,12 +26,20 @@ export function PriceManager() {
         throw new Error(data.error || "Failed to load items");
       }
       setItems(data.items || []);
-    } catch (err: any) {
-      toast.error(err.message || "Failed loading menu items");
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, "Failed loading menu items"));
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
+
+  useEffect(() => {
+    const initialFetch = window.setTimeout(() => {
+      void fetchItems();
+    }, 0);
+
+    return () => window.clearTimeout(initialFetch);
+  }, [fetchItems]);
 
   function handlePriceInputChange(id: string, val: string) {
     const num = parseFloat(val);
@@ -66,8 +74,8 @@ export function PriceManager() {
         prev.map((item) => (item.id === id ? { ...item, price: newPrice } : item))
       );
       toast.success(`Price updated to Rs. ${newPrice}`);
-    } catch (err: any) {
-      toast.error(err.message || "Failed updating price");
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, "Failed updating price"));
     } finally {
       setSavingIds((prev) => {
         const next = new Set(prev);
@@ -96,8 +104,8 @@ export function PriceManager() {
         prev.map((i) => (i.id === item.id ? { ...i, is_available: updatedStatus } : i))
       );
       toast.success(`${item.name} is now ${updatedStatus ? "Available" : "Out of Stock"}`);
-    } catch (err: any) {
-      toast.error(err.message || "Failed updating availability");
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, "Failed updating availability"));
     } finally {
       setSavingIds((prev) => {
         const next = new Set(prev);

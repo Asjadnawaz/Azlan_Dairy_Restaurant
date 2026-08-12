@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useCart } from "@/lib/cart-store";
 import { createBrowserClient } from "@/lib/supabase/client";
+import type { Order, OrderItem as DatabaseOrderItem } from "@/lib/supabase/database.types";
 import { toast } from "sonner";
 
 interface OrderItem {
@@ -28,6 +30,10 @@ interface StoredOrder {
   delivery_fee?: number;
 }
 
+type DatabaseOrderWithItems = Order & {
+  order_items: Pick<DatabaseOrderItem, "id" | "name_snapshot" | "price_snapshot" | "quantity">[] | null;
+};
+
 export default function OrdersPage() {
   const cart = useCart();
   const [orders, setOrders] = useState<StoredOrder[]>([]);
@@ -51,7 +57,7 @@ export default function OrdersPage() {
       // 2. Query Supabase for latest order data & statuses
       try {
         const { data: { user } } = await supabase.auth.getUser();
-        let dbOrders: any[] = [];
+        let dbOrders: DatabaseOrderWithItems[] = [];
 
         if (user) {
           const { data } = await supabase
@@ -68,7 +74,7 @@ export default function OrdersPage() {
             .eq("user_id", user.id)
             .order("created_at", { ascending: false })
             .limit(10);
-          if (data) dbOrders = data;
+          if (data) dbOrders = data as unknown as DatabaseOrderWithItems[];
         }
 
         const localNumbers = localOrders.map((o) => o.orderNumber).filter(Boolean);
@@ -87,12 +93,12 @@ export default function OrdersPage() {
             .in("order_number", localNumbers)
             .order("created_at", { ascending: false })
             .limit(10);
-          if (data) dbOrders = data;
+          if (data) dbOrders = data as unknown as DatabaseOrderWithItems[];
         }
 
         if (dbOrders && dbOrders.length > 0) {
           const merged: StoredOrder[] = dbOrders.map((o) => {
-            const items: OrderItem[] = (o.order_items || []).map((item: any) => ({
+            const items: OrderItem[] = (o.order_items || []).map((item) => ({
               id: item.id,
               name: item.name_snapshot,
               price: item.price_snapshot,
@@ -298,9 +304,11 @@ export default function OrdersPage() {
                           key={item.id || idx}
                           className="flex items-center gap-3 px-5 py-3"
                         >
-                          <img
+                          <Image
                             src={item.image_path || "/images/placeholder.jpg"}
                             alt={item.name}
+                            width={48}
+                            height={48}
                             className="w-12 h-12 rounded-xl object-cover shrink-0 border border-[var(--color-surface-variant)]"
                           />
                           <div className="flex-1 min-w-0">

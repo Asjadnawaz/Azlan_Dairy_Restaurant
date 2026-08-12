@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
+import Image from "next/image";
+import type { User } from "@supabase/supabase-js";
 import { useCart } from "@/lib/cart-store";
 import { toast } from "sonner";
 import { calculateDeliveryFromCoordinates, fetchRoadRoute, reverseGeocode } from "@/lib/delivery";
@@ -24,8 +26,7 @@ import { getCurrentUser, onAuthStateChange } from "@/lib/supabase/auth";
 import { createBrowserClient } from "@/lib/supabase/client";
 
 export default function CartPage() {
-  const { items, updateQty, remove, clear, totalPrice, totalItems } = useCart();
-  const [mounted, setMounted] = useState(false);
+  const { items, updateQty, remove, clear, totalPrice, totalItems, _hasHydrated } = useCart();
   const [activeStep, setActiveStep] = useState<"cart" | "checkout">("cart");
 
   // Auth state
@@ -74,7 +75,6 @@ export default function CartPage() {
   const [isStoreActive, setIsStoreActive] = useState(true);
 
   useEffect(() => {
-    setMounted(true);
     const supabase = createBrowserClient();
     supabase
       .from("settings")
@@ -86,22 +86,20 @@ export default function CartPage() {
         }
       });
 
-    const prefillUser = (u: any) => {
-      if (!u) return;
+    const prefillUser = (u: User) => {
       setUserId(u.id);
       
       const meta = u.user_metadata || {};
       
-      if (u.email && !email) setEmail(u.email);
-      if (meta.phone && phone === "03") setPhone(meta.phone);
-      
-      if (meta.first_name) {
-        if (!firstName) setFirstName(meta.first_name);
-        if (!lastName && meta.last_name) setLastName(meta.last_name);
-      } else if (meta.full_name && !firstName) {
-        const parts = meta.full_name.split(" ");
-        setFirstName(parts[0]);
-        if (parts.length > 1) setLastName(parts.slice(1).join(" "));
+      if (u.email) setEmail((current) => current || u.email || "");
+      if (typeof meta.phone === "string") setPhone((current) => current === "03" ? meta.phone : current);
+      if (typeof meta.first_name === "string") {
+        setFirstName((current) => current || meta.first_name);
+        if (typeof meta.last_name === "string") setLastName((current) => current || meta.last_name);
+      } else if (typeof meta.full_name === "string") {
+        const [givenName = "", ...remainingNames] = meta.full_name.split(" ");
+        setFirstName((current) => current || givenName);
+        setLastName((current) => current || remainingNames.join(" "));
       }
     };
 
@@ -309,7 +307,7 @@ export default function CartPage() {
     }
   }
 
-  if (!mounted) return null;
+  if (!_hasHydrated) return null;
 
   return (
     <div className="min-h-screen bg-white text-[var(--color-on-surface)] pt-6 pb-20 px-4 md:px-8">
@@ -419,9 +417,12 @@ export default function CartPage() {
                     >
                       <div className="flex items-center gap-4">
                         <div className="relative shrink-0">
-                          <img
+                          <Image
                             src={item.image_path || "/images/burger.jpg"}
                             alt={item.name}
+                            width={88}
+                            height={88}
+                            sizes="88px"
                             className="w-20 h-20 sm:w-22 sm:h-22 rounded-2xl object-cover ring-1 ring-slate-200/70 group-hover:ring-emerald-500/40 group-hover:scale-105 transition-all duration-300 shadow-sm"
                           />
                         </div>
@@ -530,7 +531,7 @@ export default function CartPage() {
 
                   <div className="flex justify-between items-center text-zinc-300">
                     <span>Estimated Delivery</span>
-                    <span className="font-bold text-white">Rs.{deliveryFee}</span>
+                    <span className="font-bold text-white">Rs.{effectiveDeliveryFee}</span>
                   </div>
 
                   {discount > 0 && (
@@ -644,7 +645,7 @@ export default function CartPage() {
                 </div>
               </div>
               <p className="text-xs text-slate-500 font-medium px-4 -mt-2">
-                Please edit your profile so that you don't need to enter your personal details again and again.
+                Please edit your profile so that you don&apos;t need to enter your personal details again and again.
               </p>
 
               {/* 2. ORDER TYPE CARD */}

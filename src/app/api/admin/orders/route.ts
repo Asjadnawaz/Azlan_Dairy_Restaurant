@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdminUser } from "@/lib/admin";
+import type { OrderItem } from "@/lib/supabase/database.types";
 
 async function verifyAdminAuth() {
   const supabase = await createServerClient();
@@ -39,7 +40,7 @@ export async function GET() {
 
     const orderIds = (orders ?? []).map((o) => o.id);
 
-    let lineItems: any[] = [];
+    let lineItems: OrderItem[] = [];
     if (orderIds.length > 0) {
       const { data: itemsData } = await admin
         .from("order_items")

@@ -1,8 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { createBrowserClient } from "@/lib/supabase/client";
 import { signInWithGoogle } from "@/lib/supabase/auth";
+import { isAdminUser } from "@/lib/admin";
 import { toast } from "sonner";
 
 interface AuthModalProps {
@@ -11,7 +13,12 @@ interface AuthModalProps {
   onAuthSuccess: (userId: string) => void;
 }
 
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
+}
+
 export function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalProps) {
+  const router = useRouter();
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -29,8 +36,8 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalProps) {
       await signInWithGoogle();
       // The redirect will handle the rest, but we'll show a message
       toast.success("Redirecting to Google...");
-    } catch (error: any) {
-      toast.error(error.message || "Failed to sign in with Google");
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "Failed to sign in with Google"));
       setGoogleLoading(false);
     }
   };
@@ -42,7 +49,7 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalProps) {
     try {
       if (isSignUp) {
         const { data, error } = await supabase.auth.signUp({
-          email,
+          email: email.trim().toLowerCase(),
           password,
           options: {
             data: {
@@ -59,21 +66,30 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalProps) {
           onClose();
         }
       } else {
+        const cleanEmail = email.trim().toLowerCase();
         const { data, error } = await supabase.auth.signInWithPassword({
-          email,
+          email: cleanEmail,
           password,
         });
 
         if (error) throw error;
-        toast.success("Signed in successfully!");
 
         if (data.user) {
+          if (isAdminUser(data.user)) {
+            toast.success("Welcome back, Admin!");
+            onClose();
+            router.push("/admin/orders");
+            router.refresh();
+            return;
+          }
+
+          toast.success("Signed in successfully!");
           onAuthSuccess(data.user.id);
           onClose();
         }
       }
-    } catch (error: any) {
-      toast.error(error.message || "Authentication failed");
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "Authentication failed"));
     } finally {
       setLoading(false);
     }

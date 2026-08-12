@@ -27,7 +27,7 @@ export default function PrivacyPolicyPage() {
         <div className="space-y-12 text-slate-600 leading-relaxed text-[15px] sm:text-base">
           <section>
             <p className="text-lg text-slate-700 font-medium mb-8">
-              This Privacy Policy describes how <strong>Azlan Fast Food and BBQ point</strong> ("we", "us", or "our") collects, uses, stores, and protects your personal information when you use our website and ordering services.
+              This Privacy Policy describes how <strong>Azlan Fast Food and BBQ point</strong> ({'"we", "us", or "our"'}) collects, uses, stores, and protects your personal information when you use our website and ordering services.
             </p>
           </section>
 

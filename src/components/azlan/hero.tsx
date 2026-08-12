@@ -2,22 +2,14 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { createBrowserClient } from "@/lib/supabase/client";
 import type { Settings } from "@/lib/supabase/database.types";
 
 export function Hero({ settings }: { settings: Settings | null }) {
-  const [isStoreActive, setIsStoreActive] = useState<boolean>(
-    settings?.is_active ?? true
-  );
+  const [storeStatusOverride, setStoreStatusOverride] = useState<boolean | null>(null);
 
   const supabase = useMemo(() => createBrowserClient(), []);
-
-  // Sync with server-provided prop
-  useEffect(() => {
-    if (settings?.is_active !== undefined) {
-      setIsStoreActive(settings.is_active);
-    }
-  }, [settings?.is_active]);
 
   // Fetch current status directly from DB (fallback for initial load & cache staleness)
   const fetchStatus = useCallback(async () => {
@@ -28,7 +20,7 @@ export function Hero({ settings }: { settings: Settings | null }) {
         .eq("id", 1)
         .single();
       if (data && typeof data.is_active === "boolean") {
-        setIsStoreActive(data.is_active);
+        setStoreStatusOverride(data.is_active);
       }
     } catch {
       // Silent fallback — keep last known state
@@ -36,7 +28,9 @@ export function Hero({ settings }: { settings: Settings | null }) {
   }, [supabase]);
 
   useEffect(() => {
-    fetchStatus();
+    void (async () => {
+      await fetchStatus();
+    })();
 
     const channel = supabase
       .channel("hero-store-status")
@@ -46,7 +40,7 @@ export function Hero({ settings }: { settings: Settings | null }) {
         (payload) => {
           const updated = payload.new as Settings;
           if (updated && typeof updated.is_active === "boolean") {
-            setIsStoreActive(updated.is_active);
+            setStoreStatusOverride(updated.is_active);
           }
         }
       )
@@ -60,7 +54,7 @@ export function Hero({ settings }: { settings: Settings | null }) {
     };
   }, [fetchStatus, supabase]);
 
-  const isOpen = isStoreActive;
+  const isOpen = storeStatusOverride ?? settings?.is_active ?? true;
 
   return (
     <section className="relative overflow-hidden bg-[#072413] text-white flex items-center pt-28 sm:pt-36 lg:pt-12 pb-16 lg:pb-20">
@@ -124,7 +118,7 @@ export function Hero({ settings }: { settings: Settings | null }) {
 
             {/* CTA Button */}
             <div className="pt-1">
-              <a
+              <Link
                 href="/#menu"
                 className="inline-flex items-center gap-2.5 px-8 py-4 rounded-full font-black text-sm sm:text-base bg-[#FFC700] text-[#072413] hover:bg-[#ffe066] active:scale-95 transition-all shadow-[0_10px_30px_rgba(255,199,0,0.3)] group transform-gpu"
               >
@@ -132,7 +126,7 @@ export function Hero({ settings }: { settings: Settings | null }) {
                   diamond
                 </span>
                 Explore Full Menu
-              </a>
+              </Link>
             </div>
 
             {/* Bottom Features Bar */}

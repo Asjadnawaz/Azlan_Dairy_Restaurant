@@ -24,7 +24,7 @@ export async function proxy(request: NextRequest) {
           }));
         },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => {
+          cookiesToSet.forEach(({ name, value }) => {
             request.cookies.set(name, value);
           });
           response = NextResponse.next({
@@ -46,21 +46,13 @@ export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
   const isAdminRoute = pathname.startsWith("/admin");
-  const isLoginRoute = pathname === "/admin/login";
 
   // Strict RBAC: Check if current authenticated user has Admin rights
   const isUserAdmin = isAdminUser(user);
 
-  // If attempting to access admin route (other than login) without admin privileges -> redirect to /admin/login
-  if (isAdminRoute && !isLoginRoute && !isUserAdmin) {
-    const loginUrl = new URL("/admin/login", request.url);
-    loginUrl.searchParams.set("error", "unauthorized");
-    return NextResponse.redirect(loginUrl);
-  }
-
-  // If visiting /admin/login while ALREADY authenticated as an Admin -> redirect to dashboard
-  if (isLoginRoute && isUserAdmin) {
-    return NextResponse.redirect(new URL("/admin/orders", request.url));
+  // If attempting to access admin route without admin privileges -> redirect to home
+  if (isAdminRoute && !isUserAdmin) {
+    return NextResponse.redirect(new URL("/", request.url));
   }
 
   const isRiderRoute = pathname.startsWith("/rider");

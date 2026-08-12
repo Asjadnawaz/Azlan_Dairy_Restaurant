@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { useCart } from "@/lib/cart-store";
 import { toast } from "sonner";
 import type { Item } from "@/lib/supabase/database.types";
@@ -42,7 +43,7 @@ export function ProductCard({ item, isStoreActive }: { item: Item; isStoreActive
     >
       {/* Image */}
       <div className="relative aspect-[4/3] overflow-hidden">
-        <img
+        <Image
           src={
             item.image_path
               ? item.image_path
@@ -51,6 +52,8 @@ export function ProductCard({ item, isStoreActive }: { item: Item; isStoreActive
               : "/images/burger.jpg"
           }
           alt={item.name}
+          fill
+          sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
           loading="lazy"
           decoding="async"
           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"

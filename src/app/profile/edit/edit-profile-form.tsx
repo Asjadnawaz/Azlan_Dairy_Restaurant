@@ -6,6 +6,10 @@ import { createBrowserClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import { User } from "@supabase/supabase-js";
 
+function getErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
+
 export function EditProfileForm({ initialUser }: { initialUser: User }) {
   const router = useRouter();
   const [saving, setSaving] = useState(false);
@@ -68,9 +72,9 @@ export function EditProfileForm({ initialUser }: { initialUser: User }) {
       toast.success("Profile updated successfully!");
       router.refresh(); // Refresh Server Components to show updated state
       
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Profile update error:", error);
-      toast.error(error.message || "Failed to update profile");
+      toast.error(getErrorMessage(error, "Failed to update profile"));
     } finally {
       setSaving(false);
     }

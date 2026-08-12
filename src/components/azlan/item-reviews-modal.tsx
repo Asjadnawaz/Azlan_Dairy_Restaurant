@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Image from "next/image";
 import { createBrowserClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import type { Item, Review } from "@/lib/supabase/database.types";
@@ -111,7 +112,7 @@ export function ItemReviewsModal({ item, onClose }: ItemReviewsModalProps) {
         {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-[var(--color-outline-variant)]/60">
           <div className="flex items-center gap-3">
-            <img
+            <Image
               src={
                 item.image_path
                   ? item.image_path
@@ -120,6 +121,8 @@ export function ItemReviewsModal({ item, onClose }: ItemReviewsModalProps) {
                   : "/images/burger.jpg"
               }
               alt={item.name}
+              width={48}
+              height={48}
               className="w-12 h-12 rounded-xl object-cover border"
             />
             <div>
@@ -304,7 +307,7 @@ export function ItemReviewsModal({ item, onClose }: ItemReviewsModalProps) {
                     </div>
 
                     <p className="text-xs text-[var(--color-on-surface-variant)] leading-relaxed">
-                      "{rev.comment}"
+                      &ldquo;{rev.comment}&rdquo;
                     </p>
 
                     <p className="text-[10px] text-zinc-400 pt-0.5">

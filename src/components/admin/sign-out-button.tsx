@@ -12,7 +12,7 @@ export function SignOutButton() {
     const supabase = createBrowserClient();
     await supabase.auth.signOut();
     toast.success("Signed out successfully");
-    router.push("/admin/login");
+    router.push("/");
     router.refresh();
   }
 

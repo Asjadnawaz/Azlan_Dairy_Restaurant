@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import Link from "next/link";
 import { createBrowserClient } from "@/lib/supabase/client";
 import type { Order, OrderItem, Settings, OrderStatus } from "@/lib/supabase/database.types";
 import { OrderCard } from "./order-card";
@@ -14,6 +15,10 @@ interface AdminDashboardProps {
   settings: Settings | null;
   userEmail: string;
   signOutButton: React.ReactNode;
+}
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
 }
 
 export function AdminDashboard({
@@ -48,8 +53,8 @@ export function AdminDashboard({
       setLineItems([]);
       setShowClearConfirm(false);
       toast.success("All orders cleared successfully!");
-    } catch (err: any) {
-      toast.error(err.message || "Failed to clear orders");
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, "Failed to clear orders"));
     } finally {
       setIsClearing(false);
     }
@@ -235,26 +240,26 @@ export function AdminDashboard({
       {/* Top bar */}
       <header className="sticky top-0 z-50 bg-[var(--color-surface-container-lowest)] border-b border-[var(--color-outline-variant)] custom-shadow">
         <div className="mx-auto max-w-7xl px-4 md:px-8 py-3.5 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <a href="/" className="text-[var(--color-on-surface-variant)] hover:text-[var(--color-primary)]">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 md:gap-4">
+            <div className="flex items-center gap-3 shrink-0">
+              <Link href="/" className="text-[var(--color-on-surface-variant)] hover:text-[var(--color-primary)]">
                 <span className="material-symbols-outlined">arrow_back</span>
-              </a>
+              </Link>
               <div>
-                <h1 className="text-xl font-extrabold text-[var(--color-primary)] leading-tight">
+                <h1 className="text-lg sm:text-xl font-extrabold text-[var(--color-primary)] leading-tight whitespace-nowrap">
                   Admin Dashboard
                 </h1>
-                <p className="text-xs text-[var(--color-on-surface-variant)]">
+                <p className="text-xs text-[var(--color-on-surface-variant)] whitespace-nowrap">
                   Azlan Fast Food Control Center
                 </p>
               </div>
             </div>
 
-            {/* Navigation Tabs */}
-            <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 ml-2">
+            {/* Navigation Tabs - Stacked vertically on mobile, horizontal on desktop */}
+            <div className="flex flex-col sm:flex-row bg-slate-100 p-1 rounded-xl border border-slate-200 gap-1 w-full sm:w-auto">
               <button
                 onClick={() => setActiveTab("orders")}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 w-full sm:w-auto ${
                   activeTab === "orders"
                     ? "bg-white text-[var(--color-primary)] shadow-sm"
                     : "text-slate-600 hover:text-slate-900"
@@ -265,7 +270,7 @@ export function AdminDashboard({
               </button>
               <button
                 onClick={() => setActiveTab("prices")}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 w-full sm:w-auto ${
                   activeTab === "prices"
                     ? "bg-white text-[var(--color-primary)] shadow-sm"
                     : "text-slate-600 hover:text-slate-900"

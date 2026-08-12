@@ -6,6 +6,10 @@ import type { Order, OrderItem } from "@/lib/supabase/database.types";
 import { RiderOrderCard } from "./rider-order-card";
 import { toast } from "sonner";
 
+function getErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
+
 export function RiderDashboard({ onLogout }: { onLogout: () => void }) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [lineItems, setLineItems] = useState<OrderItem[]>([]);
@@ -22,15 +26,19 @@ export function RiderDashboard({ onLogout }: { onLogout: () => void }) {
 
       setOrders(data.orders || []);
       setLineItems(data.lineItems || []);
-    } catch (err: any) {
-      toast.error(err.message || "Failed loading rider orders");
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, "Failed loading rider orders"));
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchOrders();
+    const initialFetch = window.setTimeout(() => {
+      void fetchOrders();
+    }, 0);
+
+    return () => window.clearTimeout(initialFetch);
   }, [fetchOrders]);
 
   // Realtime subscription for instant order updates
@@ -90,8 +98,8 @@ export function RiderDashboard({ onLogout }: { onLogout: () => void }) {
       await fetch("/api/rider/logout", { method: "POST" });
       onLogout();
       toast.success("Rider logged out");
-    } catch (err) {
-      toast.error("Logout failed");
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, "Logout failed"));
     }
   }
 

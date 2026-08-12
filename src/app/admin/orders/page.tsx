@@ -15,9 +15,9 @@ export default async function AdminOrdersPage() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Strict Server-side RBAC check — non-admins are redirected to login with error
+  // Strict Server-side RBAC check — non-admins are redirected to homepage
   if (!user || !isAdminUser(user)) {
-    redirect("/admin/login?error=unauthorized");
+    redirect("/");
   }
 
   // Use admin client (service role) to bypass RLS and fetch all orders

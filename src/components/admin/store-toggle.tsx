@@ -3,6 +3,10 @@
 import { useState } from "react";
 import { toast } from "sonner";
 
+function getErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
+
 export function StoreToggle({
   isActive,
   onToggle,
@@ -32,9 +36,9 @@ export function StoreToggle({
       }
 
       toast.success(newValue ? "Store is now OPEN" : "Store is now CLOSED");
-    } catch (err: any) {
+    } catch (err: unknown) {
       onToggle(!newValue);
-      toast.error(err.message || "Failed to update store status");
+      toast.error(getErrorMessage(err, "Failed to update store status"));
     } finally {
       setUpdating(false);
     }

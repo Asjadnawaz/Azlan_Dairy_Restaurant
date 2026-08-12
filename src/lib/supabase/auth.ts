@@ -1,4 +1,5 @@
 import { createBrowserClient } from "@/lib/supabase/client";
+import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 
 /**
  * Sign in with email and password
@@ -81,7 +82,9 @@ export async function signInWithGoogle() {
 /**
  * Listen to auth state changes
  */
-export function onAuthStateChange(callback: (event: string, session: any) => void) {
+export function onAuthStateChange(
+  callback: (event: AuthChangeEvent, session: Session | null) => void
+) {
   const supabase = createBrowserClient();
   const { data: { subscription } } = supabase.auth.onAuthStateChange(callback);
   return subscription;

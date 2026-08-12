@@ -80,7 +80,7 @@ export default function OrderMap({ deliveryLat, deliveryLng, onRouteCalculated }
 
     loadRoute();
     return () => { cancelled = true; };
-  }, [deliveryLat, deliveryLng]);
+  }, [deliveryLat, deliveryLng, onRouteCalculated]);
 
   return (
     <div className="relative w-full h-40 rounded-[var(--radius-lg)] overflow-hidden border border-[var(--color-outline-variant)]/50">

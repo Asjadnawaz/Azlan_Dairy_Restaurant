@@ -24,7 +24,7 @@ const STATUS_STEPS = [
 export function OrderTracker({ order, items, settings }: OrderTrackerProps) {
   const router = useRouter();
   const [currentStatus, setCurrentStatus] = useState(order.status);
-  const [estimatedTime, setEstimatedTime] = useState<number | null>(order.eta_minutes || null);
+  const [estimatedTime] = useState<number | null>(order.eta_minutes || null);
 
   // Handle hash-based navigation on mount
   useEffect(() => {
@@ -147,8 +147,6 @@ export function OrderTracker({ order, items, settings }: OrderTrackerProps) {
           {STATUS_STEPS.map((step, index) => {
             const isCompleted = index < stepIndex;
             const isCurrent = index === stepIndex;
-            const isPending = index > stepIndex;
-
             return (
               <div key={step.key} className="flex items-center">
                 <div className="flex flex-col items-center">
@@ -249,7 +247,7 @@ export function OrderTracker({ order, items, settings }: OrderTrackerProps) {
           {order.customer_note && (
             <div className="flex items-start gap-3">
               <span className="material-symbols-outlined text-[var(--color-on-surface-variant)] mt-0.5">note</span>
-              <p className="flex-1 text-[var(--color-on-surface-variant)] italic">"{order.customer_note}"</p>
+              <p className="flex-1 text-[var(--color-on-surface-variant)] italic">&ldquo;{order.customer_note}&rdquo;</p>
             </div>
           )}
 

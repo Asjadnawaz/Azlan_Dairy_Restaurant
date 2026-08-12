@@ -1,8 +1,8 @@
 export function isAdminUser(
   user: {
     email?: string | null;
-    app_metadata?: Record<string, any> | null;
-    user_metadata?: Record<string, any> | null;
+    app_metadata?: Record<string, unknown> | null;
+    user_metadata?: Record<string, unknown> | null;
   } | null | undefined
 ): boolean {
   if (!user || !user.email) return false;

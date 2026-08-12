@@ -1,3 +1,5 @@
+import Image from "next/image";
+import Link from "next/link";
 import type { Settings } from "@/lib/supabase/database.types";
 
 const CATEGORIES = [
@@ -68,7 +70,7 @@ export function Footer({ settings }: { settings: Settings | null }) {
         <div className="flex flex-col justify-between">
           <div>
             <div className="flex items-center gap-2.5">
-              <img
+              <Image
                 src="/images/logo.png"
                 alt="Azlan Fast Food and B B Q point logo"
                 width={40}
@@ -114,9 +116,9 @@ export function Footer({ settings }: { settings: Settings | null }) {
           <ul className="mt-3 space-y-2 text-sm text-white/70">
             {CATEGORIES.map((c) => (
               <li key={c}>
-                <a href={`/#${slugify(c)}`} className="hover:text-white transition-colors">
+                <Link href={`/#${slugify(c)}`} className="hover:text-white transition-colors">
                   {c}
-                </a>
+                </Link>
               </li>
             ))}
           </ul>
@@ -129,13 +131,13 @@ export function Footer({ settings }: { settings: Settings | null }) {
           </h4>
           <ul className="mt-3 space-y-2 text-sm text-white/70">
             <li>
-              <a href="/#about" className="hover:text-white transition-colors">About Us</a>
+              <Link href="/#about" className="hover:text-white transition-colors">About Us</Link>
             </li>
             <li>
-              <a href="/#menu" className="hover:text-white transition-colors">Full Menu</a>
+              <Link href="/#menu" className="hover:text-white transition-colors">Full Menu</Link>
             </li>
             <li>
-              <a href="/privacy-policy" className="hover:text-white transition-colors">Privacy Policy</a>
+              <Link href="/privacy-policy" className="hover:text-white transition-colors">Privacy Policy</Link>
             </li>
           </ul>
         </div>
