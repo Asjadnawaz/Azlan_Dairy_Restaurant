@@ -55,13 +55,6 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL("/", request.url));
   }
 
-  const isRiderRoute = pathname.startsWith("/rider");
-  const riderAuthCookie = request.cookies.get("rider_auth")?.value === "true";
-
-  if (isRiderRoute && !riderAuthCookie && !isUserAdmin) {
-    return NextResponse.redirect(new URL("/rider", request.url));
-  }
-
   return response;
 }
 

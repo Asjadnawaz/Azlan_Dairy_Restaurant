@@ -119,7 +119,7 @@ export default function PrivacyPolicyPage() {
               </div>
               <div>
                 <h3 className="font-bold text-slate-900 text-lg mb-2">Local Storage & Sessions</h3>
-                <p>Your browser may store cart contents and the last 5 order numbers locally. This data is not transmitted to our servers unless you place an order. We use secure HTTP-only cookies for admin and rider session management.</p>
+                <p>Your browser may store cart contents and the last 5 order numbers locally. This data is not transmitted to our servers unless you place an order. We use secure HTTP-only cookies for admin session management.</p>
               </div>
             </div>
           </section>
@@ -181,11 +181,7 @@ export default function PrivacyPolicyPage() {
                     <td className="p-4">Admin session authentication</td>
                     <td className="p-4">24 hours</td>
                   </tr>
-                  <tr>
-                    <td className="p-4 font-mono text-xs">rider_auth</td>
-                    <td className="p-4">Rider session authentication</td>
-                    <td className="p-4">24 hours</td>
-                  </tr>
+
                   <tr>
                     <td className="p-4 font-mono text-xs">sb-*</td>
                     <td className="p-4">Supabase user session management</td>

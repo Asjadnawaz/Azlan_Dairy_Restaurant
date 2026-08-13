@@ -57,7 +57,7 @@ export function Hero({ settings }: { settings: Settings | null }) {
   const isOpen = storeStatusOverride ?? settings?.is_active ?? true;
 
   return (
-    <section className="relative overflow-hidden bg-[#072413] text-white flex items-center pt-28 sm:pt-36 lg:pt-12 pb-16 lg:pb-20">
+    <section className="relative overflow-hidden bg-[#072413] text-white flex items-center pt-6 lg:pt-12 pb-16 lg:pb-20">
       {/* Ambient background glows (Optimized with GPU acceleration & lightweight mobile blurs) */}
       <div className="absolute -top-32 -left-32 w-[320px] sm:w-[500px] h-[320px] sm:h-[500px] rounded-full bg-[#5BE193] opacity-15 blur-2xl sm:blur-[120px] pointer-events-none transform-gpu" />
       <div className="absolute -bottom-32 left-1/3 w-[300px] sm:w-[450px] h-[300px] sm:h-[450px] rounded-full bg-[#FFC700] opacity-10 blur-2xl sm:blur-[140px] pointer-events-none transform-gpu hidden sm:block" />
