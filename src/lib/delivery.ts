@@ -217,13 +217,17 @@ export async function reverseGeocode(
   address: string;
   city: string;
   district: string;
+  road?: string;
+  suburb?: string;
 } | null> {
   try {
+    // zoom=18 forces exact street/building level resolution in Nominatim
     const res = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`,
+      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=18`,
       {
         headers: {
           "Accept-Language": "en-US,en;q=0.9",
+          "User-Agent": "AzlanFastFoodDelivery/1.0",
         },
       }
     );
@@ -232,14 +236,42 @@ export async function reverseGeocode(
     if (!data || !data.address) return null;
 
     const addr = data.address;
-    const city = addr.city || addr.town || addr.village || addr.city_district || "Karachi";
-    const district = addr.county || addr.suburb || addr.state_district || addr.neighbourhood || "Malir District";
-    const displayAddress = data.display_name || `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+
+    const road = addr.road || addr.pedestrian || addr.footway || addr.path || addr.street || "";
+    const houseNumber = addr.house_number || addr.building || "";
+    const neighbourhood = addr.neighbourhood || addr.residential || addr.quarter || "";
+    const suburb = addr.suburb || addr.city_district || addr.district || addr.town || "";
+    const city = addr.city || addr.town || addr.village || "Karachi";
+    const district = addr.county || addr.state_district || suburb || "Malir";
+
+    // Build specific address array
+    const parts: string[] = [];
+    if (houseNumber) parts.push(`H# ${houseNumber}`);
+    if (road) parts.push(road);
+
+    if (neighbourhood && neighbourhood !== road) {
+      parts.push(neighbourhood);
+    }
+
+    if (suburb && suburb !== neighbourhood && suburb !== road) {
+      parts.push(suburb);
+    }
+
+    let specificAddress = parts.join(", ");
+
+    // If reverse geocoding returned no specific road, format clean display name without redundant country tail
+    if (!specificAddress) {
+      const fallbackDisplay = data.display_name ? data.display_name.split(",") : [];
+      const cleanParts = fallbackDisplay.slice(0, 3).map((s: string) => s.trim()).filter(Boolean);
+      specificAddress = cleanParts.length > 0 ? cleanParts.join(", ") : `Pin (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+    }
 
     return {
-      address: displayAddress,
+      address: specificAddress,
       city,
       district,
+      road,
+      suburb,
     };
   } catch (err) {
     console.warn("Reverse geocode failed:", err);

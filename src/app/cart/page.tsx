@@ -24,6 +24,7 @@ const MapPicker = dynamic(
 import { AuthModal } from "@/components/azlan/auth-modal";
 import { getCurrentUser, onAuthStateChange } from "@/lib/supabase/auth";
 import { createBrowserClient } from "@/lib/supabase/client";
+import { getStoreOpenStatus } from "@/lib/store-hours";
 
 export default function CartPage() {
   const { items, updateQty, remove, clear, totalPrice, totalItems, _hasHydrated } = useCart();
@@ -39,6 +40,7 @@ export default function CartPage() {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("03");
   const [orderType, setOrderType] = useState<"delivery" | "pickup">("delivery");
+  const [streetDetails, setStreetDetails] = useState("");
   const [address, setAddress] = useState("");
   const [city, setCity] = useState("Karachi");
   const [district, setDistrict] = useState("");
@@ -194,20 +196,42 @@ export default function CartPage() {
 
   const valid =
     firstName.trim().length > 0 &&
-    (orderType === "pickup" || address.trim().length > 0) &&
+    (orderType === "pickup" || (streetDetails.trim().length > 0 || address.trim().length > 0)) &&
     isWithinRadius &&
-    phone.replace(/\D/g, "").length >= 8;
+    /^03\d{9}$/.test(phone.replace(/\D/g, ""));
 
   const saveOrderToStorage = (
+    orderIdVal: string,
     orderNumber: string,
     phoneVal: string,
     totalVal: number,
+    subtotalVal: number,
+    deliveryFeeVal: number,
+    nameVal: string,
+    addressVal: string,
     itemsSnapshot: { id: string; name: string; price: number; quantity: number; image_path?: string | null }[]
   ) => {
     try {
       const stored = JSON.parse(localStorage.getItem("azlan-orders") || "[]");
-      stored.unshift({ orderNumber, phone: phoneVal, total: totalVal, timestamp: Date.now(), items: itemsSnapshot });
-      localStorage.setItem("azlan-orders", JSON.stringify(stored.slice(0, 5)));
+      const newEntry = {
+        id: orderIdVal,
+        orderNumber,
+        phone: phoneVal,
+        total: totalVal,
+        subtotal: subtotalVal,
+        delivery_fee: deliveryFeeVal,
+        customer_name: nameVal,
+        customer_address: addressVal,
+        status: "pending",
+        timestamp: Date.now(),
+        items: itemsSnapshot,
+      };
+      const filtered = stored.filter(
+        (o: { orderNumber?: string; id?: string }) =>
+          o.orderNumber !== orderNumber && o.id !== orderIdVal
+      );
+      filtered.unshift(newEntry);
+      localStorage.setItem("azlan-orders", JSON.stringify(filtered.slice(0, 10)));
     } catch { }
   };
 
@@ -222,28 +246,49 @@ export default function CartPage() {
       return;
     }
 
-    if (!userId) {
-      setShowAuthModal(true);
-      return;
-    }
-
     if (orderType === "delivery" && deliveryDistance > 5.0) {
       toast.error(`Your delivery location (${deliveryDistance.toFixed(1)} km) is outside our 5 km delivery radius.`);
       return;
     }
 
     if (!valid || submitting) {
-      toast.error("Please fill in required fields (Name, Phone number & Location Pin within 5 km)");
+      toast.error("Please fill in required fields (Name, Phone number & Address)");
       return;
     }
 
     setSubmitting(true);
 
     try {
-      const fullAddressString =
+      // Check store operating hours & admin status before proceeding
+      const storeStatus = getStoreOpenStatus(isStoreActive);
+      if (!storeStatus.isOpen) {
+        toast.error(
+          storeStatus.reason === "closed_by_admin"
+            ? "Restaurant is currently paused for online orders. Please try again later."
+            : "Restaurant is closed. Operating hours are 7:00 PM to 4:00 AM."
+        );
+        setSubmitting(false);
+        return;
+      }
+
+      const cleanAddressParts = [];
+      if (streetDetails.trim()) cleanAddressParts.push(streetDetails.trim());
+      if (address.trim()) cleanAddressParts.push(address.trim());
+      if (city && !address.toLowerCase().includes(city.toLowerCase())) {
+        cleanAddressParts.push(city);
+      }
+      if (district && !address.toLowerCase().includes(district.toLowerCase()) && district !== "Malir District") {
+        cleanAddressParts.push(district);
+      }
+
+      let fullAddressString =
         orderType === "pickup"
           ? "Store Pickup (Azlan Fast Food & BBQ Point, Malir, Karachi)"
-          : `${address}, ${city}, ${district}`;
+          : cleanAddressParts.join(", ");
+
+      if (orderType === "delivery" && deliveryLocation) {
+        fullAddressString += ` [GPS: ${deliveryLocation.lat.toFixed(5)}, ${deliveryLocation.lng.toFixed(5)}]`;
+      }
 
       const res = await fetch("/api/orders", {
         method: "POST",
@@ -251,6 +296,7 @@ export default function CartPage() {
         body: JSON.stringify({
           customer_name: fullName,
           customer_phone: phone,
+          customer_email: email.trim() || undefined,
           customer_address: fullAddressString,
           customer_note: note
             ? `[${orderType.toUpperCase()}] [${paymentMethod.toUpperCase()}] [If unavailable: ${itemUnavailableAction}] ${note}`
@@ -290,9 +336,14 @@ export default function CartPage() {
       };
 
       saveOrderToStorage(
+        orderId,
         orderNumber,
         phone,
         grandTotal,
+        subtotal,
+        effectiveDeliveryFee,
+        fullName,
+        fullAddressString,
         items.map((i) => ({ id: i.id, name: i.name, price: i.price, quantity: i.quantity, image_path: i.image_path }))
       );
 
@@ -556,9 +607,13 @@ export default function CartPage() {
                 <button
                   type="button"
                   onClick={() => setActiveStep("checkout")}
-                  className="font-integral text-xs sm:text-base uppercase tracking-wider font-black w-full py-3 sm:py-4 text-center rounded-full bg-[#FFC700] text-black hover:bg-[#E0AF00] hover:cursor-pointer active:scale-[0.99] shadow-lg shadow-amber-500/20 transition-all flex items-center justify-center gap-2 border-1 border-white"
+                  className="group relative overflow-hidden font-integral text-xs sm:text-base uppercase tracking-wider font-black w-full py-3.5 sm:py-4 text-center rounded-full bg-gradient-to-r from-[#FFC700] via-[#ffd736] to-[#FFC700] text-[#00230C] hover:text-[#001507] shadow-xl shadow-amber-500/25 hover:shadow-amber-400/40 hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 flex items-center justify-center gap-2 border border-white/60 hover:cursor-pointer"
                 >
-                  PROCEED TO CHECKOUT ➔
+                  <span className="absolute inset-0 w-1/2 h-full bg-white/30 skew-x-[-20deg] -translate-x-full group-hover:translate-x-[300%] transition-transform duration-1000 ease-in-out" />
+                  <span>PROCEED TO CHECKOUT</span>
+                  <span className="material-symbols-outlined text-[18px] sm:text-[22px] font-black group-hover:translate-x-1.5 transition-transform duration-300">
+                    arrow_forward
+                  </span>
                 </button>
               </div>
             </div>
@@ -583,6 +638,39 @@ export default function CartPage() {
                   Step 2 of 2: Checkout Details
                 </span>
               </div>
+
+              {/* Guest / Member Banner */}
+              {!userId ? (
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 sm:p-4 rounded-2xl bg-emerald-50/90 border border-emerald-200 text-xs shadow-xs">
+                  <div className="flex items-center gap-2.5 text-emerald-950 font-medium">
+                    <span className="material-symbols-outlined text-[24px] text-emerald-600 shrink-0">
+                      flash_on
+                    </span>
+                    <div>
+                      <p className="font-extrabold text-xs text-emerald-950">
+                        Guest Checkout Active (No Login Required)
+                      </p>
+                      <p className="text-[11px] text-emerald-800">
+                        Have an account? Sign in with Google to auto-fill your name & address.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowAuthModal(true)}
+                    className="px-4 py-2 rounded-xl bg-[#00230c] hover:bg-[#073615] text-[#FFC700] font-bold text-xs transition-all shadow-xs shrink-0 self-start sm:self-auto cursor-pointer"
+                  >
+                    Sign In / Google
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between p-3 sm:p-3.5 rounded-2xl bg-slate-100 border border-slate-200 text-xs">
+                  <div className="flex items-center gap-2 text-slate-800 font-semibold">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" />
+                    <span>Signed in as <strong>{firstName || "Valued Member"}</strong></span>
+                  </div>
+                </div>
+              )}
 
               {/* 1. CONTACT CARD */}
               <div className="bg-slate-50/60 border border-slate-200 rounded-3xl p-4 sm:p-8 space-y-3 sm:space-y-4">
@@ -645,7 +733,7 @@ export default function CartPage() {
                 </div>
               </div>
               <p className="text-[11px] sm:text-xs text-slate-500 font-medium px-2 sm:px-4 -mt-2">
-                Please edit your profile so that you don&apos;t need to enter your personal details again and again.
+                No account required! Just enter your Name & Phone to place your order directly.
               </p>
 
               {/* 2. ORDER TYPE CARD */}
@@ -704,24 +792,41 @@ export default function CartPage() {
                     </button>
                   </div>
 
-                  <div className="flex items-center justify-between text-xs text-slate-500 bg-blue-50/50 p-2 sm:p-2.5 rounded-xl border border-blue-100 gap-2">
-                    <span className="text-[11px] sm:text-xs">
-                      {isGeocoding
-                        ? "Fetching address details from map pin..."
-                        : "Click anywhere on the map below or use GPS to automatically detect your address."}
+                  <div className="p-3 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-950 text-xs font-medium flex items-start gap-2.5 shadow-xs">
+                    <span className="material-symbols-outlined text-[20px] text-emerald-700 shrink-0 mt-0.5">
+                      home_pin
                     </span>
-                    <span className="shrink-0 px-2 py-0.5 rounded bg-blue-100 text-blue-700 font-bold text-[10px] flex items-center gap-1">
-                      {isGeocoding ? "Locating..." : "Dynamic Pin Address"}
-                    </span>
+                    <div>
+                      <p className="font-extrabold text-xs text-emerald-950">House # & Gali / Street # Required</p>
+                      <p className="text-[11px] text-emerald-800 leading-tight">
+                        Map pins detect general areas (e.g. Khokhrapar). Please enter your exact <strong>House #, Gali #, and Landmark</strong> below so our rider delivers directly to your door!
+                      </p>
+                    </div>
                   </div>
 
                   <div>
+                    <label className="block text-xs font-black text-emerald-950 uppercase tracking-wide mb-1.5">
+                      House #, Gali / Street # & Nearby Landmark <span className="text-rose-600">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={streetDetails}
+                      onChange={(e) => setStreetDetails(e.target.value)}
+                      placeholder="e.g. House # 45, Gali / Street # 3, Near Jamia Masjid"
+                      className="w-full h-11 sm:h-12 rounded-xl bg-white border-2 border-emerald-600/60 px-3.5 sm:px-4 text-xs sm:text-sm font-bold text-slate-900 focus:outline-none focus:border-emerald-700 focus:ring-2 focus:ring-emerald-600/20 transition-all shadow-xs"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-extrabold text-slate-700 uppercase tracking-wide mb-1.5">
+                      Detected Area / Sector (Auto-filled from Map Pin)
+                    </label>
                     <input
                       type="text"
                       value={address}
                       onChange={(e) => setAddress(e.target.value)}
-                      placeholder={isGeocoding ? "Detecting address..." : "Street address / House # (auto-detected from map pin)"}
-                      className="w-full h-11 sm:h-12 rounded-xl bg-slate-100/80 border border-slate-200 px-3.5 sm:px-4 text-xs sm:text-sm font-medium focus:outline-none focus:border-slate-950 focus:bg-white transition-all"
+                      placeholder={isGeocoding ? "Detecting area from map pin..." : "e.g. Khokhrapar No 1, Malir"}
+                      className="w-full h-11 sm:h-12 rounded-xl bg-slate-100/80 border border-slate-200 px-3.5 sm:px-4 text-xs sm:text-sm font-semibold text-slate-700 focus:outline-none focus:border-slate-950 focus:bg-white transition-all"
                     />
                   </div>
 
@@ -863,8 +968,8 @@ export default function CartPage() {
                     type="button"
                     onClick={handleSubmitOrder}
                     disabled={!valid || submitting || !isStoreActive}
-                    className={`font-integral text-xs sm:text-base uppercase tracking-wider font-black w-full py-3 sm:py-4 text-center rounded-full shadow-lg transition-all flex items-center justify-center gap-2 ${valid && isStoreActive && !submitting
-                      ? "bg-[#FFC700] text-slate-950 hover:bg-amber-400 active:scale-[0.99] shadow-amber-500/20"
+                    className={`btn-shine font-integral text-xs sm:text-base uppercase tracking-wider font-black w-full py-3.5 sm:py-4 text-center rounded-full shadow-lg transition-all flex items-center justify-center gap-2 ${valid && isStoreActive && !submitting
+                      ? "bg-gradient-to-r from-[#FFC700] via-[#ffd736] to-[#FFC700] text-[#00230C] hover:text-[#001507] hover:scale-[1.02] active:scale-[0.98] shadow-amber-500/25 hover:shadow-amber-400/40 hover:cursor-pointer"
                       : "bg-slate-300 text-slate-500 cursor-not-allowed"
                       }`}
                   >

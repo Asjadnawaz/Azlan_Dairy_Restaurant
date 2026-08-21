@@ -169,9 +169,45 @@ body {
 }
 
 /* =========================================
-   Scrollbar helpers
+   Custom Global & Utility Scrollbar System
    ========================================= */
 
+/* Firefox global scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #0d4722 transparent;
+}
+
+/* WebKit & Chromium custom scrollbar (Chrome, Edge, Safari, Opera) */
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(240, 244, 241, 0.6);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #0d4722 0%, #00230c 100%);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+  transition: background 0.3s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #156d36 0%, #0d4722 100%);
+  border: 1px solid transparent;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Hide scrollbar helper */
 .no-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
@@ -181,9 +217,10 @@ body {
   display: none;
 }
 
+/* Slim scrollbar helper */
 .slim-scrollbar {
   scrollbar-width: thin;
-  scrollbar-color: rgba(0, 35, 12, 0.2) transparent;
+  scrollbar-color: #0d4722 transparent;
 }
 
 .slim-scrollbar::-webkit-scrollbar {
@@ -192,12 +229,33 @@ body {
 }
 
 .slim-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(0, 35, 12, 0.2);
-  border-radius: 3px;
+  background: #0d4722;
+  border-radius: 9999px;
+}
+
+.slim-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #00230c;
 }
 
 .slim-scrollbar::-webkit-scrollbar-track {
   background: transparent;
+}
+
+/* Dark theme / Rider Dashboard custom scrollbar */
+.bg-slate-900::-webkit-scrollbar-track,
+.bg-slate-950::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.8);
+}
+
+.bg-slate-900::-webkit-scrollbar-thumb,
+.bg-slate-950::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #10b981 0%, #059669 100%);
+  border-radius: 9999px;
+}
+
+.bg-slate-900::-webkit-scrollbar-thumb:hover,
+.bg-slate-950::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #34d399 0%, #10b981 100%);
 }
 
 /* =========================================
@@ -642,7 +700,6 @@ body {
   width: 100%;
   display: flex;
   align-items: center;
-  margin-top: 0.75rem;
 }
 
 .cart-btn-animated {
@@ -711,4 +768,180 @@ body {
   right: 0px;
   opacity: 1;
   background: var(--color-surface-container-lowest);
+}
+
+/* =========================================
+   Thermal Printer Receipt Styles & Media Query
+   ========================================= */
+
+#thermal-receipt-print-portal {
+  display: none;
+}
+
+@media print {
+  /* Hide all top-level DOM nodes except the thermal receipt portal */
+  body > *:not(#thermal-receipt-print-portal) {
+    display: none !important;
+  }
+
+  /* Reset document properties to match thermal paper width and auto length */
+  html, body {
+    width: 100% !important;
+    max-width: 80mm !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-family: 'Courier New', Courier, monospace, sans-serif !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  body.paper-58mm {
+    max-width: 58mm !important;
+  }
+
+  @page {
+    size: 80mm auto; /* continuous roll with dynamic height to prevent paper wastage */
+    margin: 0mm;
+  }
+
+  #thermal-receipt-print-portal {
+    display: block !important;
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  #thermal-receipt-printable-root {
+    display: block !important;
+    width: 100% !important;
+    margin: 0 auto !important;
+    padding: 4mm 2mm !important;
+    box-sizing: border-box !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  .thermal-receipt-container,
+  .thermal-receipt-container * {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+}
+
+/* =========================================
+   Azlan Brand Premium Toasts System (Sonner)
+   ========================================= */
+
+[data-sonner-toaster] {
+  font-family: var(--font-jakarta), system-ui, sans-serif !important;
+  z-index: 99999 !important;
+}
+
+[data-sonner-toast] {
+  background: linear-gradient(135deg, #00230c 0%, #063414 100%) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 199, 0, 0.35) !important;
+  border-radius: 16px !important;
+  box-shadow: 0 16px 36px -6px rgba(0, 35, 12, 0.55), 0 0 20px rgba(255, 199, 0, 0.12) !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+  padding: 14px 18px !important;
+  font-size: 13.5px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.01em !important;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+/* Success toast (e.g. Added to cart, profile updated) */
+[data-sonner-toast][data-type="success"] {
+  border-color: rgba(37, 211, 102, 0.5) !important;
+  box-shadow: 0 16px 40px -6px rgba(0, 35, 12, 0.6), 0 0 24px rgba(37, 211, 102, 0.22) !important;
+}
+
+[data-sonner-toast] [data-icon] {
+  color: #FFC700 !important;
+  margin-right: 8px !important;
+}
+
+[data-sonner-toast][data-type="success"] [data-icon] {
+  color: #25D366 !important;
+}
+
+/* Error toast */
+[data-sonner-toast][data-type="error"] {
+  border-color: rgba(239, 68, 68, 0.5) !important;
+  box-shadow: 0 16px 40px -6px rgba(0, 35, 12, 0.6), 0 0 24px rgba(239, 68, 68, 0.25) !important;
+}
+
+[data-sonner-toast][data-type="error"] [data-icon] {
+  color: #F87171 !important;
+}
+
+/* Title & Description typography */
+[data-sonner-toast] [data-title] {
+  color: #ffffff !important;
+  font-weight: 700 !important;
+  font-size: 14px !important;
+}
+
+[data-sonner-toast] [data-description] {
+  color: #94A3B8 !important;
+  font-size: 12.5px !important;
+  margin-top: 2px !important;
+}
+
+/* Close button styling */
+[data-sonner-toast] [data-close-button] {
+  background: rgba(255, 255, 255, 0.1) !important;
+  color: #CBD5E1 !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  transition: all 0.2s ease !important;
+}
+
+[data-sonner-toast] [data-close-button]:hover {
+  background: rgba(255, 255, 255, 0.25) !important;
+  color: #ffffff !important;
+}
+
+/* =========================================
+   Universal Button Shine Effect
+   ========================================= */
+
+.btn-shine {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.btn-shine::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 55%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.35) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  transform: skewX(-22deg) translateX(-160%);
+  transition: transform 0.85s cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: none;
+  z-index: 5;
+}
+
+.btn-shine:hover::after {
+  transform: skewX(-22deg) translateX(300%);
 }

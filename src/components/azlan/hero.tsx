@@ -5,9 +5,11 @@ import Image from "next/image";
 import Link from "next/link";
 import { createBrowserClient } from "@/lib/supabase/client";
 import type { Settings } from "@/lib/supabase/database.types";
+import { getStoreOpenStatus, isWithinOperatingHours } from "@/lib/store-hours";
 
 export function Hero({ settings }: { settings: Settings | null }) {
   const [storeStatusOverride, setStoreStatusOverride] = useState<boolean | null>(null);
+  const [isHoursOpen, setIsHoursOpen] = useState<boolean>(true);
 
   const supabase = useMemo(() => createBrowserClient(), []);
 
@@ -27,7 +29,12 @@ export function Hero({ settings }: { settings: Settings | null }) {
     }
   }, [supabase]);
 
+  const checkTiming = useCallback(() => {
+    setIsHoursOpen(isWithinOperatingHours());
+  }, []);
+
   useEffect(() => {
+    checkTiming();
     void (async () => {
       await fetchStatus();
     })();
@@ -46,15 +53,20 @@ export function Hero({ settings }: { settings: Settings | null }) {
       )
       .subscribe();
 
-    const interval = setInterval(fetchStatus, 30_000);
+    const interval = setInterval(() => {
+      checkTiming();
+      void fetchStatus();
+    }, 15_000);
 
     return () => {
       supabase.removeChannel(channel);
       clearInterval(interval);
     };
-  }, [fetchStatus, supabase]);
+  }, [fetchStatus, checkTiming, supabase]);
 
-  const isOpen = storeStatusOverride ?? settings?.is_active ?? true;
+  const adminActive = storeStatusOverride ?? settings?.is_active ?? true;
+  const storeStatus = getStoreOpenStatus(adminActive);
+  const isOpen = storeStatus.isOpen;
 
   return (
     <section className="relative overflow-hidden bg-[#072413] text-white flex items-center pt-6 lg:pt-12 pb-16 lg:pb-20">
@@ -78,23 +90,25 @@ export function Hero({ settings }: { settings: Settings | null }) {
                 className={`inline-flex items-center gap-2.5 px-4 py-2 rounded-full text-xs sm:text-sm font-extrabold backdrop-blur-md border shadow-md transition-all ${
                   isOpen
                     ? "bg-emerald-500/15 border-emerald-400/50 text-emerald-300"
-                    : "bg-rose-500/15 border-rose-400/50 text-rose-300"
+                    : "bg-amber-500/15 border-amber-400/50 text-amber-300"
                 }`}
               >
                 <span className="relative flex h-2.5 w-2.5 shrink-0">
                   <span
                     className={`absolute inline-flex h-full w-full rounded-full opacity-75 ${
-                      isOpen ? "bg-emerald-400 animate-ping" : "bg-rose-400"
+                      isOpen ? "bg-emerald-400 animate-ping" : "bg-amber-400"
                     }`}
                   />
                   <span
                     className={`relative inline-flex h-2.5 w-2.5 rounded-full ${
-                      isOpen ? "bg-emerald-400" : "bg-rose-500"
+                      isOpen ? "bg-emerald-400" : "bg-amber-500"
                     }`}
                   />
                 </span>
                 <span className="font-bold">
-                  {isOpen ? "We're Open — Order Now!" : "We're Currently Closed"}
+                  {isOpen
+                    ? "We're Open — Order Now!"
+                    : "Closed Right Now (Hours: 7 PM – 4 AM)"}
                 </span>
               </div>
             </div>
@@ -120,12 +134,12 @@ export function Hero({ settings }: { settings: Settings | null }) {
             <div className="pt-1">
               <Link
                 href="/#menu"
-                className="inline-flex items-center gap-2.5 px-8 py-4 rounded-full font-black text-sm sm:text-base bg-[#FFC700] text-[#072413] hover:bg-[#ffe066] active:scale-95 transition-all shadow-[0_10px_30px_rgba(255,199,0,0.3)] group transform-gpu"
+                className="btn-shine inline-flex items-center gap-2.5 px-8 py-4 rounded-full font-black text-sm sm:text-base bg-[#FFC700] text-[#072413] hover:bg-[#ffe066] active:scale-95 transition-all shadow-[0_10px_30px_rgba(255,199,0,0.3)] group transform-gpu"
               >
                 <span className="material-symbols-outlined text-[20px] text-[#072413] group-hover:rotate-12 transition-transform">
                   diamond
                 </span>
-                Explore Full Menu
+                Order Now
               </Link>
             </div>
 

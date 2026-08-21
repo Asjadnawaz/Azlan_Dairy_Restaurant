@@ -68,10 +68,20 @@ export async function getSession() {
  */
 export async function signInWithGoogle() {
   const supabase = createBrowserClient();
+  
+  let redirectUrl = "";
+  if (typeof window !== "undefined") {
+    let origin = window.location.origin;
+    if (origin.includes("0.0.0.0")) {
+      origin = origin.replace("0.0.0.0", "localhost");
+    }
+    redirectUrl = `${origin}/auth/callback`;
+  }
+
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
-      redirectTo: typeof window !== 'undefined' ? window.location.origin : '',
+      redirectTo: redirectUrl,
     },
   });
 

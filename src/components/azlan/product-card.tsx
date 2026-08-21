@@ -5,10 +5,12 @@ import Image from "next/image";
 import { useCart } from "@/lib/cart-store";
 import { toast } from "sonner";
 import type { Item } from "@/lib/supabase/database.types";
+import { ProductDetailModal } from "./product-detail-modal";
 
 export function ProductCard({ item, isStoreActive }: { item: Item; isStoreActive: boolean }) {
   const add = useCart((s) => s.add);
   const [added, setAdded] = useState(false);
+  const [showDetail, setShowDetail] = useState(false);
 
   function handleAdd() {
     if (!isStoreActive) {
@@ -42,7 +44,10 @@ export function ProductCard({ item, isStoreActive }: { item: Item; isStoreActive
         hover:shadow-[0_16px_44px_rgba(0,35,12,0.16)]"
     >
       {/* Image */}
-      <div className="relative aspect-[4/3] overflow-hidden">
+      <div
+        className="relative aspect-[4/3] overflow-hidden cursor-pointer"
+        onClick={() => setShowDetail(true)}
+      >
         <Image
           src={
             item.image_path
@@ -58,7 +63,12 @@ export function ProductCard({ item, isStoreActive }: { item: Item; isStoreActive
           decoding="async"
           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+          <span className="px-3 py-1.5 rounded-full bg-black/60 text-white font-extrabold text-xs backdrop-blur-xs flex items-center gap-1 shadow-md">
+            <span className="material-symbols-outlined text-[16px]">visibility</span>
+            View Details
+          </span>
+        </div>
 
         {/* Badges */}
         <div className="absolute top-2.5 right-2.5 flex flex-col gap-1.5 z-10">
@@ -89,7 +99,12 @@ export function ProductCard({ item, isStoreActive }: { item: Item; isStoreActive
       {/* Body */}
       <div className="p-3 flex flex-col flex-1">
         <div className="flex items-start justify-between gap-2">
-          <h3 className="font-bold text-sm leading-tight">{item.name}</h3>
+          <h3
+            className="font-bold text-sm leading-tight cursor-pointer hover:text-emerald-700 transition-colors"
+            onClick={() => setShowDetail(true)}
+          >
+            {item.name}
+          </h3>
           {isSpicy && (
             <span className="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-[var(--color-error)]/10 text-[var(--color-error)] text-[10px] font-bold">
               <span className="material-symbols-outlined" style={{ fontSize: 11 }}>local_fire_department</span>
@@ -98,7 +113,10 @@ export function ProductCard({ item, isStoreActive }: { item: Item; isStoreActive
           )}
         </div>
 
-        <p className="mt-1 text-xs text-[var(--color-on-surface-variant)] line-clamp-2 flex-1">
+        <p
+          className="mt-1 text-xs text-[var(--color-on-surface-variant)] line-clamp-2 flex-1 cursor-pointer"
+          onClick={() => setShowDetail(true)}
+        >
           {item.description}
         </p>
 
@@ -126,34 +144,52 @@ export function ProductCard({ item, isStoreActive }: { item: Item; isStoreActive
           </span>
         </div>
 
-        {/* Action */}
-        <div className="cart-btn-wrapper">
+        {/* Action Buttons */}
+        <div className="mt-3 flex items-center gap-2">
           <button
+            type="button"
+            onClick={() => setShowDetail(true)}
+            className="h-[42px] px-3 sm:px-3.5 rounded-full border border-slate-200 hover:border-emerald-600 hover:bg-emerald-50 text-slate-700 hover:text-emerald-800 font-extrabold text-xs transition-all flex items-center justify-center gap-1.5 shrink-0 shadow-xs active:scale-95"
+            title="View Details"
+          >
+            <span className="material-symbols-outlined text-[16px]">visibility</span>
+            <span className="hidden sm:inline">Details</span>
+          </button>
+
+          <button
+            type="button"
             onClick={handleAdd}
             disabled={!isStoreActive}
-            className={`cart-btn-animated ${added ? "added-state" : ""} ${
-              !isStoreActive ? "opacity-50 cursor-not-allowed" : ""
+            className={`h-[42px] flex-1 px-4 rounded-full font-extrabold text-xs uppercase tracking-wider transition-all hover:cursor-pointer duration-200 flex items-center justify-center gap-1.5 shadow-sm active:scale-95 btn-shine ${
+              added
+                ? "bg-emerald-600 text-white shadow-emerald-900/20"
+                : !isStoreActive
+                ? "bg-slate-300 text-slate-500 cursor-not-allowed"
+                : "bg-[var(--color-primary)] hover:bg-emerald-800 text-white shadow-emerald-900/20"
             }`}
           >
             {added ? (
               <>
                 <span className="material-symbols-outlined text-[18px]">check</span>
-                Added
+                <span>Added</span>
               </>
             ) : (
               <>
                 <span className="material-symbols-outlined text-[18px]">add_shopping_cart</span>
-                {isStoreActive ? "Add to Cart" : "Store Closed"}
+                <span>{isStoreActive ? "Add to Cart" : "Store Closed"}</span>
               </>
             )}
           </button>
-          <div className="cart-btn-icon">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 268.832 268.832">
-              <path d="M265.17 125.577l-80-80c-4.88-4.88-12.796-4.88-17.677 0-4.882 4.882-4.882 12.796 0 17.678l58.66 58.66H12.5c-6.903 0-12.5 5.598-12.5 12.5 0 6.903 5.597 12.5 12.5 12.5h213.654l-58.66 58.662c-4.88 4.882-4.88 12.796 0 17.678 2.44 2.44 5.64 3.66 8.84 3.66s6.398-1.22 8.84-3.66l79.997-80c4.883-4.882 4.883-12.796 0-17.678z" />
-            </svg>
-          </div>
         </div>
       </div>
+
+      {showDetail && (
+        <ProductDetailModal
+          item={item}
+          onClose={() => setShowDetail(false)}
+          isStoreActive={isStoreActive}
+        />
+      )}
     </article>
   );
 }

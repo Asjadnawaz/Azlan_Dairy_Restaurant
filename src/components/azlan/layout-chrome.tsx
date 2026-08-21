@@ -10,8 +10,8 @@ import { HashScrollHandler } from "@/components/azlan/hash-scroll-handler";
 export function LayoutChrome({ isStoreActive }: { isStoreActive: boolean }) {
   const pathname = usePathname();
 
-  // Do not render website chrome (Header, Navbar, Announcement bar, Floating buttons) on admin routes
-  if (pathname?.startsWith("/admin")) {
+  // Do not render website chrome (Header, Navbar, Announcement bar, Floating buttons) on admin or rider routes
+  if (pathname?.startsWith("/admin") || pathname?.startsWith("/rider")) {
     return null;
   }
 

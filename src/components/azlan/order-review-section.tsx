@@ -118,6 +118,17 @@ export function OrderReviewSection({ order, items }: OrderReviewSectionProps) {
     }
   };
 
+  const isEligibleForReview = order.status === "delivered" || order.status === "completed";
+
+  if (!isEligibleForReview) {
+    return (
+      <div className="mt-6 bg-slate-50 border border-slate-200 rounded-[var(--radius-2xl)] p-5 text-center text-slate-500 text-xs font-bold flex items-center justify-center gap-2">
+        <span className="material-symbols-outlined text-[20px] text-amber-500">lock</span>
+        You can only review items you&apos;ve ordered and received.
+      </div>
+    );
+  }
+
   return (
     <div className="mt-6 bg-gradient-to-br from-emerald-50 to-white dark:from-zinc-900 dark:to-zinc-900 border-2 border-emerald-500/30 rounded-[var(--radius-2xl)] p-6 shadow-md">
       <div className="flex items-center gap-3 mb-4">

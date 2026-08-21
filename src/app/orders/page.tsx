@@ -43,7 +43,6 @@ export default function OrdersPage() {
   useEffect(() => {
     async function loadOrders() {
       setLoading(true);
-      const supabase = createBrowserClient();
 
       // 1. Load local storage orders
       let localOrders: StoredOrder[] = [];
@@ -54,85 +53,61 @@ export default function OrdersPage() {
         localOrders = [];
       }
 
-      // 2. Query Supabase for latest order data & statuses
+      // 2. Query /api/orders for latest order data & statuses
       try {
-        const { data: { user } } = await supabase.auth.getUser();
-        let dbOrders: DatabaseOrderWithItems[] = [];
-
-        if (user) {
-          const { data } = await supabase
-            .from("orders")
-            .select(`
-              *,
-              order_items (
-                id,
-                name_snapshot,
-                price_snapshot,
-                quantity
-              )
-            `)
-            .eq("user_id", user.id)
-            .order("created_at", { ascending: false })
-            .limit(10);
-          if (data) dbOrders = data as unknown as DatabaseOrderWithItems[];
-        }
-
         const localNumbers = localOrders.map((o) => o.orderNumber).filter(Boolean);
-        if (localNumbers.length > 0 && dbOrders.length === 0) {
-          const { data } = await supabase
-            .from("orders")
-            .select(`
-              *,
-              order_items (
-                id,
-                name_snapshot,
-                price_snapshot,
-                quantity
-              )
-            `)
-            .in("order_number", localNumbers)
-            .order("created_at", { ascending: false })
-            .limit(10);
-          if (data) dbOrders = data as unknown as DatabaseOrderWithItems[];
-        }
+        const queryUrl =
+          localNumbers.length > 0
+            ? `/api/orders?numbers=${encodeURIComponent(localNumbers.join(","))}`
+            : `/api/orders`;
 
-        if (dbOrders && dbOrders.length > 0) {
-          const merged: StoredOrder[] = dbOrders.map((o) => {
-            const items: OrderItem[] = (o.order_items || []).map((item) => ({
-              id: item.id,
-              name: item.name_snapshot,
-              price: item.price_snapshot,
-              quantity: item.quantity,
-              image_path: null,
-            }));
+        const res = await fetch(queryUrl);
+        if (res.ok) {
+          const data = await res.json();
+          const dbOrders: DatabaseOrderWithItems[] = data.orders || [];
 
-            // Match local storage to preserve image previews if available
-            const localMatch = localOrders.find((l) => l.orderNumber === o.order_number);
-            if (localMatch?.items) {
-              items.forEach((it) => {
-                const lm = localMatch.items?.find((i) => i.name === it.name || i.id === it.id);
-                if (lm?.image_path) it.image_path = lm.image_path;
-              });
-            }
+          if (dbOrders && dbOrders.length > 0) {
+            const merged: StoredOrder[] = dbOrders.map((o) => {
+              const items: OrderItem[] = (o.order_items || []).map((item) => ({
+                id: item.id,
+                name: item.name_snapshot,
+                price: item.price_snapshot,
+                quantity: item.quantity,
+                image_path: null,
+              }));
 
-            return {
-              id: o.id,
-              orderNumber: o.order_number,
-              phone: o.customer_phone || localMatch?.phone || "",
-              total: o.total,
-              subtotal: o.subtotal,
-              delivery_fee: o.delivery_fee,
-              timestamp: new Date(o.placed_at || o.created_at).getTime(),
-              items: items.length > 0 ? items : localMatch?.items || [],
-              status: o.status || "pending",
-              customer_name: o.customer_name,
-              customer_address: o.customer_address,
-            };
-          });
+              // Match local storage to preserve image previews if available
+              const localMatch = localOrders.find(
+                (l) => l.orderNumber === o.order_number || l.id === o.id
+              );
+              if (localMatch?.items) {
+                items.forEach((it) => {
+                  const lm = localMatch.items?.find(
+                    (i) => i.name === it.name || i.id === it.id
+                  );
+                  if (lm?.image_path) it.image_path = lm.image_path;
+                });
+              }
 
-          setOrders(merged.slice(0, 10));
-          setLoading(false);
-          return;
+              return {
+                id: o.id,
+                orderNumber: o.order_number,
+                phone: o.customer_phone || localMatch?.phone || "",
+                total: o.total,
+                subtotal: o.subtotal,
+                delivery_fee: o.delivery_fee,
+                timestamp: new Date(o.placed_at || o.created_at).getTime(),
+                items: items.length > 0 ? items : localMatch?.items || [],
+                status: o.status || "pending",
+                customer_name: o.customer_name,
+                customer_address: o.customer_address,
+              };
+            });
+
+            setOrders(merged.slice(0, 10));
+            setLoading(false);
+            return;
+          }
         }
       } catch (e) {
         console.error("Error fetching live orders:", e);

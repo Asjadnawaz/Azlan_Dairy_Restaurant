@@ -40,11 +40,34 @@ export type Item = {
   updated_at?: string;
 };
 
+export type UserRole = "admin" | "rider" | "customer";
+
+export type Profile = {
+  id: string;
+  role: UserRole;
+  phone: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type Rider = {
+  id: string;
+  user_id: string;
+  name: string;
+  phone: string;
+  status: "available" | "busy" | "offline";
+  created_at: string;
+  updated_at: string;
+};
+
 export type OrderStatus =
   | "pending"
   | "preparing"
   | "ready"
+  | "picked_up"
+  | "out_for_delivery"
   | "delivering"
+  | "delivered"
   | "completed"
   | "cancelled";
 
@@ -67,6 +90,7 @@ export type Order = {
   confirmed_at: string | null;
   preparing_at: string | null;
   ready_at: string | null;
+  picked_up_at?: string | null;
   delivering_at: string | null;
   completed_at: string | null;
   cancelled_at: string | null;
@@ -74,6 +98,8 @@ export type Order = {
   created_at: string;
   updated_at: string;
   user_id: string | null;
+  rider_id?: string | null;
+  rider_note?: string | null;
   delivery_distance_km: number | null;
   delivery_coordinates: { lat: number; lng: number } | null;
   delivery_fee: number;

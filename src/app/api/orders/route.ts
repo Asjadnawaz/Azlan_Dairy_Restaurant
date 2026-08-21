@@ -3,6 +3,8 @@ import { createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { Resend } from "resend";
 import { generateOrderConfirmationEmail } from "@/lib/email/order-confirmation";
+import { sanitizeText, sanitizePhone, isValidPakistanPhone } from "@/lib/sanitize";
+import { getStoreOpenStatus } from "@/lib/store-hours";
 
 interface OrderLineItem {
   id: string;
@@ -17,6 +19,7 @@ interface CreateOrderBody {
   customer_phone: string;
   customer_address: string;
   customer_note?: string;
+  customer_email?: string;
   items: OrderLineItem[];
   subtotal: number;
   delivery_fee: number;
@@ -26,24 +29,91 @@ interface CreateOrderBody {
   user_id?: string;
 }
 
+export async function GET(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const numbersParam = searchParams.get("numbers");
+    const phoneParam = searchParams.get("phone");
+
+    const admin = createAdminClient();
+
+    // Check user session
+    const supabase = await createServerClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    let query = admin.from("orders").select(`
+      *,
+      order_items (
+        id,
+        name_snapshot,
+        price_snapshot,
+        quantity,
+        line_total
+      )
+    `);
+
+    if (user?.id) {
+      query = query.eq("user_id", user.id);
+    } else if (numbersParam) {
+      const numbers = numbersParam
+        .split(",")
+        .map((n) => n.trim())
+        .filter(Boolean);
+      if (numbers.length === 0) {
+        return NextResponse.json({ orders: [] });
+      }
+      query = query.in("order_number", numbers);
+    } else if (phoneParam) {
+      query = query.eq("customer_phone", phoneParam.trim());
+    } else {
+      return NextResponse.json({ orders: [] });
+    }
+
+    const { data: orders, error } = await query
+      .order("created_at", { ascending: false })
+      .limit(10);
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ orders: orders || [] });
+  } catch (err) {
+    console.error("Get orders exception:", err);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = (await req.json()) as CreateOrderBody;
 
-    // Server-side validation
-    const name = body.customer_name?.trim();
-    const phone = body.customer_phone?.trim();
-    const address = body.customer_address?.trim();
+    // Server-side sanitization and validation
+    const name = sanitizeText(body.customer_name, 50);
+    const phone = sanitizePhone(body.customer_phone);
+    const address = sanitizeText(body.customer_address, 250);
+    const note = sanitizeText(body.customer_note, 200);
 
-    if (!name || !phone || !address) {
+    if (!name) {
       return NextResponse.json(
-        { error: "Missing required fields: name, phone, address" },
+        { error: "Customer name is required (max 50 characters)" },
         { status: 400 }
       );
     }
-    if (phone.replace(/\D/g, "").length < 8) {
+    if (!isValidPakistanPhone(phone)) {
       return NextResponse.json(
-        { error: "Invalid phone number" },
+        { error: "Valid 11-digit Pakistan phone number required (e.g. 03001234567)" },
+        { status: 400 }
+      );
+    }
+    if (!address) {
+      return NextResponse.json(
+        { error: "Delivery address is required (max 250 characters)" },
         { status: 400 }
       );
     }
@@ -61,18 +131,20 @@ export async function POST(req: NextRequest) {
     // Use admin client (bypasses RLS) for all database operations
     const admin = createAdminClient();
 
-    // Verify store is active (kill-switch)
+    // Verify store is active & within operating hours (7:00 PM - 4:00 AM PKT)
     const { data: settings } = await admin
       .from("settings")
       .select("is_active")
       .eq("id", 1)
       .single();
 
-    if (settings && !settings.is_active) {
-      return NextResponse.json(
-        { error: "Store Closed. Please Try Again Later." },
-        { status: 403 }
-      );
+    const storeStatus = getStoreOpenStatus(settings?.is_active ?? true);
+    if (!storeStatus.isOpen) {
+      const errorMsg =
+        storeStatus.reason === "closed_by_admin"
+          ? "Restaurant is currently paused for online orders. Please check back later."
+          : "Restaurant is currently closed. Operating hours are 7:00 PM to 4:00 AM.";
+      return NextResponse.json({ error: errorMsg }, { status: 403 });
     }
 
     // Generate order number: AD-XXXX
@@ -148,7 +220,7 @@ export async function POST(req: NextRequest) {
 
     // --- Send Order Confirmation Email ---
     // Fire-and-forget: we don't block the response on email delivery.
-    const customerEmail = user?.email;
+    const customerEmail = body.customer_email || user?.email;
     if (customerEmail && order.id && order.order_number && process.env.RESEND_API_KEY) {
       const resend = new Resend(process.env.RESEND_API_KEY);
       const emailHtml = generateOrderConfirmationEmail({

@@ -56,19 +56,6 @@ export function EditProfileForm({ initialUser }: { initialUser: User }) {
 
       if (updateError) throw updateError;
 
-      // 2. Handle email update if changed
-      if (email !== initialUser.email) {
-        const { error: emailError } = await supabase.auth.updateUser({ email });
-        if (emailError) {
-          toast.error(`Email update failed: ${emailError.message}`);
-        } else {
-          toast.success("Profile updated. A confirmation link has been sent to your new email.");
-          setSaving(false);
-          router.refresh();
-          return;
-        }
-      }
-
       toast.success("Profile updated successfully!");
       router.refresh(); // Refresh Server Components to show updated state
       
@@ -157,7 +144,7 @@ export function EditProfileForm({ initialUser }: { initialUser: User }) {
               {/* Email Address */}
               <div>
                 <label htmlFor="email" className="block text-sm font-bold text-[var(--color-on-surface)] mb-1.5">
-                  Email Address <span className="text-[var(--color-error)]">*</span>
+                  Email Address
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
@@ -166,16 +153,19 @@ export function EditProfileForm({ initialUser }: { initialUser: User }) {
                   <input
                     type="email"
                     id="email"
-                    required
+                    disabled
+                    readOnly
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="w-full pl-10 pr-4 py-3 bg-[var(--color-surface-container-lowest)] border border-[var(--color-outline-variant)] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/50 focus:border-[var(--color-primary)] transition-all"
+                    className="w-full pl-10 pr-4 py-3 bg-slate-100/80 border border-[var(--color-outline-variant)]/60 rounded-xl text-sm text-slate-600 font-medium cursor-not-allowed select-none opacity-80"
                     placeholder="Enter your email address"
                   />
+                  <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none">
+                    <span className="material-symbols-outlined text-[18px] text-slate-400">lock</span>
+                  </div>
                 </div>
                 <p className="text-xs text-[var(--color-on-surface-variant)] mt-1.5 flex items-center gap-1">
-                  <span className="material-symbols-outlined text-[14px]">info</span>
-                  Changing your email may require verification.
+                  <span className="material-symbols-outlined text-[14px]">lock</span>
+                  Email address is linked to your account and cannot be changed.
                 </p>
               </div>
 

@@ -66,9 +66,9 @@ export function StoreToggle({
       </span>
       <span className="flex items-center gap-1">
         <span className="material-symbols-outlined text-[18px]">
-          {isActive ? "storefront" : "storefront"}
+          {isActive ? "schedule" : "lock"}
         </span>
-        {isActive ? "Store Open" : "Store Closed"}
+        {isActive ? "Auto Schedule (7 PM - 4 AM)" : "Store Closed (Manual)"}
       </span>
     </button>
   );

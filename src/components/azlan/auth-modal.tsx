@@ -59,9 +59,20 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalProps) {
         });
 
         if (error) throw error;
-        toast.success("Account created! You can now place your order.");
 
         if (data.user) {
+          // Trigger server-side profile sync (uses admin client bypass)
+          try {
+            const syncRes = await fetch("/api/auth/sync-profile", { method: "POST" });
+            const syncData = await syncRes.json();
+            if (syncData.role) {
+              console.log("Profile synced with role:", syncData.role);
+            }
+          } catch {
+            // fallback
+          }
+
+          toast.success("Account created! You can now place your order.");
           onAuthSuccess(data.user.id);
           onClose();
         }
@@ -75,15 +86,38 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalProps) {
         if (error) throw error;
 
         if (data.user) {
-          if (isAdminUser(data.user)) {
+          // Trigger server-side profile sync (uses admin client bypass)
+          let userRole = isAdminUser(data.user) ? "admin" : "customer";
+          try {
+            const syncRes = await fetch("/api/auth/sync-profile", { method: "POST" });
+            const syncData = await syncRes.json();
+            if (syncData.role) {
+              userRole = syncData.role;
+            }
+          } catch {
+            // fallback
+          }
+
+          if (userRole === "admin" || isAdminUser(data.user)) {
             toast.success("Welcome back, Admin!");
             onClose();
             router.push("/admin/orders");
             router.refresh();
             return;
+          } else if (userRole === "rider") {
+            toast.success("Welcome back, Rider!");
+            onClose();
+            router.push("/rider");
+            router.refresh();
+            return;
           }
 
-          toast.success("Signed in successfully!");
+          const firstName = data.user.user_metadata?.full_name?.split(" ")[0] || "Valued Customer";
+          window.dispatchEvent(
+            new CustomEvent("azlan_user_logged_in", {
+              detail: { user: data.user, provider: "email" },
+            })
+          );
           onAuthSuccess(data.user.id);
           onClose();
         }
@@ -191,7 +225,7 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalProps) {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3 rounded-full bg-[var(--color-primary)] text-white font-bold hover:bg-[var(--color-primary-container)] transition-colors custom-shadow disabled:opacity-50"
+              className="btn-shine w-full py-3 rounded-full bg-[var(--color-primary)] text-white font-bold hover:bg-[var(--color-primary-container)] transition-colors custom-shadow disabled:opacity-50"
             >
               {loading ? "Processing..." : isSignUp ? "Create Account" : "Sign In"}
             </button>

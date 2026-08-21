@@ -172,7 +172,14 @@ export default async function RootLayout({
         >
           <LayoutChrome isStoreActive={isStoreActive} />
           <main className="flex-1">{children}</main>
-          <Toaster position="bottom-right" richColors />
+          <Toaster
+            position="bottom-right"
+            closeButton
+            toastOptions={{
+              duration: 3000,
+              className: "azlan-brand-toast",
+            }}
+          />
         </ThemeProvider>
       </body>
     </html>

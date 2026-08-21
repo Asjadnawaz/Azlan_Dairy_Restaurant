@@ -2,11 +2,12 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
 import type { User } from "@supabase/supabase-js";
 import { useCart } from "@/lib/cart-store";
 import { AuthModal } from "./auth-modal";
+import { WelcomeModal } from "./welcome-modal";
 import { getCurrentUser, signOut, onAuthStateChange } from "@/lib/supabase/auth";
 import { isAdminUser } from "@/lib/admin";
 import { toast } from "sonner";
@@ -16,9 +17,11 @@ export function Header() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [user, setUser] = useState<User | null>(null);
+  const [isRider, setIsRider] = useState(false);
   const totalItems = useCart((s) => s.totalItems());
   const hasHydrated = useCart((s) => s._hasHydrated);
   const pathname = usePathname();
+  const router = useRouter();
 
   /**
    * Handle clicks on hash-based nav links (e.g. "/#about", "/#menu").
@@ -68,32 +71,71 @@ export function Header() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
+  const checkUserRole = useCallback(async (currentUser: User | null) => {
+    if (!currentUser) {
+      setUser(null);
+      setIsRider(false);
+      return;
+    }
+    setUser(currentUser);
+
+    if (currentUser.user_metadata?.role === 'rider' || currentUser.app_metadata?.role === 'rider') {
+      setIsRider(true);
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/auth/sync-profile", { method: "POST" });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.role === "rider") {
+          setIsRider(true);
+          return;
+        }
+      }
+    } catch {
+      // fallback
+    }
+    setIsRider(false);
+  }, []);
+
   // Check auth state on mount and listen for changes
   useEffect(() => {
     getCurrentUser().then((currentUser) => {
-      setUser(currentUser);
+      void checkUserRole(currentUser);
     }).catch(() => {
       setUser(null);
+      setIsRider(false);
     });
 
     const subscription = onAuthStateChange((event, session) => {
       if (event === 'SIGNED_IN' && session?.user) {
-        setUser(session.user);
+        void checkUserRole(session.user);
       } else if (event === 'SIGNED_OUT') {
         setUser(null);
+        setIsRider(false);
+        if (pathname.startsWith("/rider") || pathname.startsWith("/admin")) {
+          router.push("/");
+          router.refresh();
+        }
       }
     });
 
     return () => {
       subscription.unsubscribe();
     };
-  }, []);
+  }, [checkUserRole, pathname, router]);
 
   const handleLogout = async () => {
     try {
       await signOut();
       setUser(null);
+      setIsRider(false);
       toast.success("Logged out successfully");
+      if (pathname.startsWith("/rider") || pathname.startsWith("/admin")) {
+        router.push("/");
+        router.refresh();
+      }
     } catch {
       toast.error("Failed to logout");
     }
@@ -102,7 +144,7 @@ export function Header() {
   const handleAuthSuccess = () => {
     void getCurrentUser()
       .then((currentUser) => {
-        setUser(currentUser);
+        void checkUserRole(currentUser);
         setShowAuthModal(false);
       })
       .catch(() => toast.error("Unable to refresh your profile."));
@@ -145,7 +187,7 @@ export function Header() {
                 {/* Gold accent pip — luxury detail */}
                 <span className="w-[6px] h-[6px] rounded-full bg-[#FFC700] shadow-sm shrink-0 mb-0.5" />
               </div>
-              <span className="max-[380px]:hidden text-[clamp(0.4rem,2.5vw,0.625rem)] font-bold uppercase tracking-[0.18em] sm:tracking-[0.26em] text-slate-400 leading-none group-hover:text-slate-600 transition-colors duration-300 whitespace-nowrap">
+              <span className="text-[9px] sm:text-[10px] md:text-xs font-bold uppercase tracking-[0.14em] sm:tracking-[0.22em] text-slate-500 leading-none group-hover:text-slate-700 transition-colors duration-300 whitespace-nowrap">
                 Fast Food & BBQ Point
               </span>
             </div>
@@ -157,6 +199,7 @@ export function Header() {
               { label: "Home",     href: "/" },
               { label: "Our Menu", href: "/#menu" },
               { label: "About Us", href: "/#about" },
+              { label: "Privacy Policy", href: "/privacy-policy" },
             ].map(({ label, href }) => (
               <Link
                 key={label}
@@ -203,8 +246,21 @@ export function Header() {
                         href="/admin/orders"
                         className="flex items-center gap-3 px-4 py-2.5 text-sm font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 transition-colors"
                       >
-                        <span className="material-symbols-outlined text-[20px] text-[var(--color-primary)]">admin_panel_settings</span>
+                        <span className="material-symbols-outlined text-[20px] text-[var(--color-primary)]">
+                          admin_panel_settings
+                        </span>
                         Admin Dashboard
+                      </Link>
+                    )}
+                    {(isRider || user?.user_metadata?.role === 'rider' || user?.app_metadata?.role === 'rider') && (
+                      <Link
+                        href="/rider"
+                        className="flex items-center gap-3 px-4 py-2.5 text-sm font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 transition-colors"
+                      >
+                        <span className="material-symbols-outlined text-[20px] text-[var(--color-primary)]">
+                          two_wheeler
+                        </span>
+                        Rider Dashboard
                       </Link>
                     )}
                     <Link
@@ -235,7 +291,7 @@ export function Header() {
             ) : (
               <button
                 onClick={() => setShowAuthModal(true)}
-                className="px-4 py-2 rounded-full bg-[var(--color-primary)] text-white font-bold text-sm hover:bg-emerald-800 active:scale-[0.97] transition-all duration-200 flex items-center gap-1.5 shadow-sm shadow-emerald-900/20"
+                className="btn-shine px-4 py-2 rounded-full bg-[var(--color-primary)] text-white font-bold text-sm hover:bg-emerald-800 hover:scale-105 active:scale-95 transition-all duration-200 flex items-center gap-1.5 shadow-sm shadow-emerald-900/20"
               >
                 <span className="material-symbols-outlined text-[17px]">person</span>
                 <span className="hidden sm:inline">Sign In</span>
@@ -341,6 +397,14 @@ export function Header() {
                   <span className="material-symbols-outlined text-[20px] text-[var(--color-primary)]">info</span>
                   About Us
                 </Link>
+                <Link
+                  href="/privacy-policy"
+                  onClick={() => setMobileOpen(false)}
+                  className="flex items-center gap-3 py-3 px-3 rounded-xl font-medium text-[var(--color-on-surface)] hover:bg-[var(--color-surface-container)] hover:text-[var(--color-primary)] transition-all"
+                >
+                  <span className="material-symbols-outlined text-[20px] text-[var(--color-primary)]">policy</span>
+                  Privacy Policy
+                </Link>
               </nav>
             </div>
 
@@ -373,6 +437,16 @@ export function Header() {
                     >
                       <span className="material-symbols-outlined text-[20px] text-[var(--color-primary)]">admin_panel_settings</span>
                       Admin Dashboard
+                    </Link>
+                  )}
+                  {(isRider || user?.user_metadata?.role === 'rider' || user?.app_metadata?.role === 'rider') && (
+                    <Link
+                      href="/rider"
+                      onClick={() => setMobileOpen(false)}
+                      className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-emerald-900 bg-emerald-50 border border-emerald-200 transition-colors"
+                    >
+                      <span className="material-symbols-outlined text-[20px] text-[var(--color-primary)]">two_wheeler</span>
+                      Rider Dashboard
                     </Link>
                   )}
                   <Link
@@ -413,12 +487,13 @@ export function Header() {
         </div>
       )}
 
-      {/* Auth Modal */}
+      {/* Auth Modal & Welcome Modal */}
       <AuthModal
         isOpen={showAuthModal}
         onClose={() => setShowAuthModal(false)}
         onAuthSuccess={handleAuthSuccess}
       />
+      <WelcomeModal />
     </>
   );
 }

@@ -48,7 +48,7 @@ export function OrderTracker({ order, items, settings }: OrderTrackerProps) {
     const supabase = createBrowserClient();
     let channel: RealtimeChannel;
 
-    // Subscribe to order status changes
+    // 1. Subscribe to order status changes via Supabase Realtime
     const setupRealtime = () => {
       channel = supabase
         .channel(`order:${order.id}`)
@@ -73,12 +73,31 @@ export function OrderTracker({ order, items, settings }: OrderTrackerProps) {
 
     setupRealtime();
 
+    // 2. Polling fallback (every 6 seconds while order is active)
+    const pollInterval = setInterval(async () => {
+      if (currentStatus === "completed" || currentStatus === "cancelled") {
+        return;
+      }
+      try {
+        const res = await fetch(`/api/orders/${order.id}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.order?.status && data.order.status !== currentStatus) {
+            setCurrentStatus(data.order.status);
+          }
+        }
+      } catch (err) {
+        // silent fallback
+      }
+    }, 6000);
+
     return () => {
       if (channel) {
         supabase.removeChannel(channel);
       }
+      clearInterval(pollInterval);
     };
-  }, [order.id]);
+  }, [order.id, currentStatus]);
 
   const getCurrentStepIndex = () => {
     return STATUS_STEPS.findIndex((step) => step.key === currentStatus);

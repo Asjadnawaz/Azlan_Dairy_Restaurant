@@ -6,7 +6,7 @@ import type { User } from "@supabase/supabase-js";
 import { useCart } from "@/lib/cart-store";
 import { toast } from "sonner";
 import { MapPicker } from "./map-picker";
-import { calculateDeliveryFromCoordinates, fetchRoadRoute } from "@/lib/delivery";
+import { calculateDeliveryFromCoordinates, fetchRoadRoute, reverseGeocode } from "@/lib/delivery";
 import { AuthModal } from "./auth-modal";
 import { getCurrentUser, onAuthStateChange } from "@/lib/supabase/auth";
 
@@ -32,6 +32,7 @@ export function CartDrawer({ isStoreActive }: CartDrawerProps) {
   const [form, setForm] = useState({
     name: "",
     phone: "03",
+    streetDetails: "",
     address: "",
     note: "",
   });
@@ -54,20 +55,6 @@ export function CartDrawer({ isStoreActive }: CartDrawerProps) {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
   const [itemUnavailableAction, setItemUnavailableAction] = useState<"Call me" | "Cancel entire order">("Call me");
-
-  // Save order to localStorage after successful placement
-  const saveOrderToStorage = (
-    orderNumber: string,
-    phone: string,
-    total: number,
-    itemsSnapshot: { id: string; name: string; price: number; quantity: number; image_path?: string | null }[]
-  ) => {
-    try {
-      const stored = JSON.parse(localStorage.getItem("azlan-orders") || "[]");
-      stored.unshift({ orderNumber, phone, total, timestamp: Date.now(), items: itemsSnapshot });
-      localStorage.setItem("azlan-orders", JSON.stringify(stored.slice(0, 5))); // Keep last 5
-    } catch { }
-  };
 
   useEffect(() => {
     // Check for existing auth session
@@ -144,13 +131,24 @@ export function CartDrawer({ isStoreActive }: CartDrawerProps) {
     const fallback = calculateDeliveryFromCoordinates(lat, lng);
     setDeliveryDistance(fallback.distanceKm);
     setDeliveryFee(fallback.deliveryFee);
-    setDeliveryBreakdown(fallback.breakdown + " (calculating road route…)");
+    setDeliveryBreakdown(fallback.breakdown + " (calculating road route & reverse geocoding…)");
 
-    // Fetch accurate road-based distance from OSRM
-    const route = await fetchRoadRoute(lat, lng);
+    // Fetch road route and reverse geocode in parallel
+    const [route, geoResult] = await Promise.all([
+      fetchRoadRoute(lat, lng),
+      reverseGeocode(lat, lng),
+    ]);
+
     setDeliveryDistance(route.distanceKm);
     setDeliveryFee(route.deliveryFee);
     setDeliveryBreakdown(route.breakdown);
+
+    if (geoResult && geoResult.address) {
+      setForm((prev) => ({
+        ...prev,
+        address: geoResult.address,
+      }));
+    }
 
     if (route.distanceKm > 5.0) {
       toast.error(
@@ -163,10 +161,45 @@ export function CartDrawer({ isStoreActive }: CartDrawerProps) {
 
   const valid =
     form.name.trim().length > 0 &&
-    form.address.trim().length > 0 &&
+    (form.streetDetails.trim().length > 0 || form.address.trim().length > 0) &&
     form.phone.replace(/\D/g, "").length >= 8 &&
     deliveryLocation !== null &&
     !isTooFar;
+
+  const saveOrderToStorage = (
+    orderIdVal: string,
+    orderNumber: string,
+    phoneVal: string,
+    totalVal: number,
+    subtotalVal: number,
+    deliveryFeeVal: number,
+    nameVal: string,
+    addressVal: string,
+    itemsSnapshot: { id: string; name: string; price: number; quantity: number; image_path?: string | null }[]
+  ) => {
+    try {
+      const stored = JSON.parse(localStorage.getItem("azlan-orders") || "[]");
+      const newEntry = {
+        id: orderIdVal,
+        orderNumber,
+        phone: phoneVal,
+        total: totalVal,
+        subtotal: subtotalVal,
+        delivery_fee: deliveryFeeVal,
+        customer_name: nameVal,
+        customer_address: addressVal,
+        status: "pending",
+        timestamp: Date.now(),
+        items: itemsSnapshot,
+      };
+      const filtered = stored.filter(
+        (o: { orderNumber?: string; id?: string }) =>
+          o.orderNumber !== orderNumber && o.id !== orderIdVal
+      );
+      filtered.unshift(newEntry);
+      localStorage.setItem("azlan-orders", JSON.stringify(filtered.slice(0, 10)));
+    } catch { }
+  };
 
   async function handleSubmit() {
     if (isTooFar) {
@@ -181,23 +214,17 @@ export function CartDrawer({ isStoreActive }: CartDrawerProps) {
       return;
     }
 
-    // Check for authentication
-    if (!userId) {
-      setShowAuthModal(true);
-      return;
-    }
-
-    // Debug log to check delivery values
-    console.log("📍 DEBUG - Submitting order with delivery data:", {
-      deliveryFee,
-      deliveryDistance,
-      deliveryLocation,
-      hasLocation: deliveryLocation !== null,
-    });
-
     setSubmitting(true);
 
     try {
+      const cleanAddressParts = [];
+      if (form.streetDetails.trim()) cleanAddressParts.push(form.streetDetails.trim());
+      if (form.address.trim()) cleanAddressParts.push(form.address.trim());
+      let fullAddressString = cleanAddressParts.join(", ");
+      if (deliveryLocation) {
+        fullAddressString += ` [GPS: ${deliveryLocation.lat.toFixed(5)}, ${deliveryLocation.lng.toFixed(5)}]`;
+      }
+
       // 1. Submit order to Supabase via the SECURITY DEFINER RPC
       const res = await fetch("/api/orders", {
         method: "POST",
@@ -205,7 +232,7 @@ export function CartDrawer({ isStoreActive }: CartDrawerProps) {
         body: JSON.stringify({
           customer_name: form.name,
           customer_phone: form.phone,
-          customer_address: form.address,
+          customer_address: fullAddressString,
           customer_note: form.note
             ? `[If unavailable: ${itemUnavailableAction}] ${form.note}`
             : `[If unavailable: ${itemUnavailableAction}]`,
@@ -246,15 +273,20 @@ export function CartDrawer({ isStoreActive }: CartDrawerProps) {
 
       // 3. Clear cart + reset form
       clear();
-      setForm({ name: "", phone: "03", address: "", note: "" });
+      setForm({ name: "", phone: "03", streetDetails: "", address: "", note: "" });
       setStep("cart");
       close();
 
       // 4. Save order to localStorage for tracking page
       saveOrderToStorage(
+        orderId,
         orderNumber,
         form.phone,
         total,
+        subtotal,
+        deliveryFee,
+        form.name,
+        fullAddressString,
         items.map((i) => ({ id: i.id, name: i.name, price: i.price, quantity: i.quantity, image_path: i.image_path }))
       );
 
@@ -433,20 +465,25 @@ export function CartDrawer({ isStoreActive }: CartDrawerProps) {
 
                 {/* Checkout button */}
                 <button
-                  onClick={() => {
-                    if (!userId) {
-                      setShowAuthModal(true);
-                    } else {
-                      setStep("checkout");
-                    }
-                  }}
+                  onClick={() => setStep("checkout")}
                   disabled={!isStoreActive}
-                  className={`w-full py-3.5 rounded-full font-bold text-white transition-all custom-shadow
-                    ${isStoreActive
-                      ? "bg-[var(--color-primary)] hover:bg-[var(--color-primary-container)]"
-                      : "bg-[var(--color-on-surface-variant)]/40 cursor-not-allowed"}`}
+                  className={`group relative overflow-hidden w-full py-3.5 rounded-full font-integral text-xs sm:text-sm uppercase tracking-wider font-black transition-all duration-300 flex items-center justify-center gap-2 shadow-lg ${
+                    isStoreActive
+                      ? "bg-gradient-to-r from-[#FFC700] via-[#ffd736] to-[#FFC700] text-[#00230C] hover:text-[#001507] shadow-amber-500/25 hover:shadow-amber-400/40 hover:scale-[1.02] active:scale-[0.98] hover:cursor-pointer border border-white/60"
+                      : "bg-slate-300 text-slate-500 cursor-not-allowed"
+                  }`}
                 >
-                  {isStoreActive ? "Proceed to Checkout" : "Store Closed"}
+                  {isStoreActive ? (
+                    <>
+                      <span className="absolute inset-0 w-1/2 h-full bg-white/30 skew-x-[-20deg] -translate-x-full group-hover:translate-x-[300%] transition-transform duration-1000 ease-in-out" />
+                      <span>Proceed to Checkout</span>
+                      <span className="material-symbols-outlined text-[18px] font-black group-hover:translate-x-1.5 transition-transform duration-300">
+                        arrow_forward
+                      </span>
+                    </>
+                  ) : (
+                    "Store Closed"
+                  )}
                 </button>
                 {!isStoreActive && (
                   <p className="text-xs text-center text-[var(--color-error)]">
@@ -468,6 +505,33 @@ export function CartDrawer({ isStoreActive }: CartDrawerProps) {
               <span className="material-symbols-outlined text-[18px]">arrow_back</span>
               Back to Cart
             </button>
+
+            {/* Guest / Member Info Banner */}
+            {!userId ? (
+              <div className="flex items-center justify-between p-3 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs shadow-xs">
+                <div className="flex items-center gap-2 text-emerald-950 font-medium">
+                  <span className="material-symbols-outlined text-[20px] text-emerald-600 shrink-0">
+                    flash_on
+                  </span>
+                  <div>
+                    <p className="font-extrabold text-xs text-emerald-950">Guest Checkout</p>
+                    <p className="text-[10px] text-emerald-800">No login required to order.</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowAuthModal(true)}
+                  className="px-2.5 py-1 rounded-lg bg-[#00230c] text-[#FFC700] font-bold text-[11px] hover:bg-[#073615] transition-colors cursor-pointer"
+                >
+                  Sign In
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-100 border border-slate-200 text-xs font-semibold text-slate-800">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                <span>Signed in as <strong>{form.name || "Valued Member"}</strong></span>
+              </div>
+            )}
 
             {/* Malir-only delivery notice */}
             <div className="inline-flex items-center gap-2 px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-secondary-brand)]/10 border border-[var(--color-secondary-brand)]/20">
@@ -515,16 +579,31 @@ export function CartDrawer({ isStoreActive }: CartDrawerProps) {
                 />
               </div>
               <p className="text-xs text-slate-500 font-medium px-2 -mt-2">
-                Please edit your profile so that you don&apos;t need to enter your personal details again and again.
+                No account required! Just enter your Name & Phone to place your order directly.
               </p>
               <div>
-                <label className="block text-sm font-semibold mb-1.5">Delivery Address *</label>
-                <textarea
+                <label className="block text-xs font-bold text-[var(--color-primary)] uppercase tracking-wide mb-1">
+                  House #, Street / Gali # & Landmark *
+                </label>
+                <input
+                  type="text"
+                  value={form.streetDetails}
+                  onChange={(e) => setForm({ ...form, streetDetails: e.target.value })}
+                  placeholder="e.g. House # 45, Gali / Street # 3, Near Jamia Masjid"
+                  className="w-full h-11 rounded-[var(--radius-md)] bg-[var(--color-surface-container)] border border-[var(--color-outline-variant)] px-4 text-sm font-semibold focus:outline-none focus:border-[var(--color-primary)] transition-all"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[var(--color-on-surface-variant)] uppercase mb-1">
+                  Detected Area (from Map Pin)
+                </label>
+                <input
+                  type="text"
                   value={form.address}
                   onChange={(e) => setForm({ ...form, address: e.target.value })}
-                  placeholder="House #, Street, Area, Malir, Karachi"
-                  rows={3}
-                  className="w-full rounded-[var(--radius-md)] bg-[var(--color-surface-container)] border border-[var(--color-outline-variant)] px-4 py-3 text-sm focus:outline-none focus:border-[var(--color-primary)]/40 focus:ring-2 focus:ring-[var(--color-primary)]/10 transition-all resize-none"
+                  placeholder="e.g. Khokhrapar No 1, Malir"
+                  className="w-full h-10 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] border border-[var(--color-outline-variant)] px-4 text-xs font-medium focus:outline-none focus:border-[var(--color-primary)]/40 transition-all"
                 />
               </div>
 

@@ -53,7 +53,7 @@ export function FloatingButtons() {
       >
         <span className="material-symbols-outlined text-[26px]">shopping_cart</span>
         {hasHydrated && totalItems > 0 && (
-          <span className="absolute -top-1 -right-1 flex h-6 min-w-6 items-center justify-center rounded-full bg-[var(--color-secondary-brand)] text-xs font-bold px-1.5">
+          <span className="absolute -top-1 -right-1 flex h-6 min-w-6 items-center justify-center rounded-full bg-[#FFC700] text-[#00230C] text-xs font-black px-1.5 shadow-md animate-soft-pulse">
             {totalItems}
           </span>
         )}

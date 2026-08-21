@@ -1,4 +1,4 @@
-import { createServerClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { notFound } from "next/navigation";
 import { OrderTracker } from "@/components/azlan/order-tracker";
 import type { Order, OrderItem } from "@/lib/supabase/database.types";
@@ -9,10 +9,10 @@ interface Props {
 
 export default async function OrderPage({ params }: Props) {
   const { id: orderId } = await params;
-  const supabase = await createServerClient();
+  const admin = createAdminClient();
 
-  // Support looking up by either DB ID or order number
-  const orderQuery = supabase
+  // Support looking up by either DB ID or order number (case-insensitive or exact)
+  const orderQuery = admin
     .from("orders")
     .select(`
       *,
@@ -27,8 +27,8 @@ export default async function OrderPage({ params }: Props) {
 
   const isUuid = /^[0-9a-f-]{36}$/i.test(orderId);
   const { data: order, error } = isUuid
-    ? await orderQuery.eq("id", orderId).single()
-    : await orderQuery.eq("order_number", orderId).maybeSingle();
+    ? await orderQuery.eq("id", orderId).maybeSingle()
+    : await orderQuery.ilike("order_number", orderId).maybeSingle();
 
   if (error || !order) {
     console.error("Order fetch error:", error);
@@ -36,7 +36,7 @@ export default async function OrderPage({ params }: Props) {
   }
 
   // Fetch settings for store info
-  const { data: settings } = await supabase
+  const { data: settings } = await admin
     .from("settings")
     .select("*")
     .single();

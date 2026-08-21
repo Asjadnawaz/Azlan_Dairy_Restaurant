@@ -1,12 +1,14 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { createBrowserClient } from "@/lib/supabase/client";
 import type { Order, OrderItem, Settings, OrderStatus } from "@/lib/supabase/database.types";
 import { OrderCard } from "./order-card";
 import { StoreToggle } from "./store-toggle";
 import { PriceManager } from "./price-manager";
+import { ThermalReceipt } from "./thermal-receipt";
 import { toast } from "sonner";
 
 interface AdminDashboardProps {
@@ -32,11 +34,56 @@ export function AdminDashboard({
   const [orders, setOrders] = useState<Order[]>(initialOrders);
   const [lineItems, setLineItems] = useState<OrderItem[]>(initialLineItems);
   const [isActive, setIsActive] = useState(settings?.is_active ?? true);
-  const [filter, setFilter] = useState<OrderStatus | "all">("all");
+  const [filter, setFilter] = useState<OrderStatus | "all" | "with_rider" | "delivered">("all");
   const [isClearing, setIsClearing] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [printOrder, setPrintOrder] = useState<{
+    order: Order;
+    items: OrderItem[];
+    paperWidth: "80mm" | "58mm";
+  } | null>(null);
+  const [showPrintModal, setShowPrintModal] = useState(false);
+  const [isPrinting, setIsPrinting] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const supabaseRef = useRef(createBrowserClient());
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const handleOpenPrintPreview = (
+    orderToPrint: Order,
+    itemsToPrint: OrderItem[],
+    paperWidth: "80mm" | "58mm" = "80mm"
+  ) => {
+    setPrintOrder({ order: orderToPrint, items: itemsToPrint, paperWidth });
+    setShowPrintModal(true);
+  };
+
+  const handleTriggerPrint = (width?: "80mm" | "58mm") => {
+    const finalWidth = width || printOrder?.paperWidth || "80mm";
+    if (finalWidth === "58mm") {
+      document.body.classList.add("paper-58mm");
+    } else {
+      document.body.classList.remove("paper-58mm");
+    }
+    if (printOrder && printOrder.paperWidth !== finalWidth) {
+      setPrintOrder({ ...printOrder, paperWidth: finalWidth });
+    }
+    setIsPrinting(true);
+  };
+
+  useEffect(() => {
+    if (isPrinting && printOrder) {
+      const timer = setTimeout(() => {
+        window.print();
+        setIsPrinting(false);
+        document.body.classList.remove("paper-58mm");
+      }, 150);
+      return () => clearTimeout(timer);
+    }
+  }, [isPrinting, printOrder]);
 
   async function handleClearAllOrders() {
     if (isClearing) return;
@@ -109,7 +156,30 @@ export function AdminDashboard({
         { event: "INSERT", schema: "public", table: "order_items" },
         (payload) => {
           const newItem = payload.new as OrderItem;
-          setLineItems((prev) => [...prev, newItem]);
+          setLineItems((prev) => {
+            if (prev.some((i) => i.id === newItem.id)) return prev;
+            return [...prev, newItem];
+          });
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "order_items" },
+        (payload) => {
+          const updated = payload.new as OrderItem;
+          setLineItems((prev) =>
+            prev.map((i) => (i.id === updated.id ? { ...i, ...updated } : i))
+          );
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "order_items" },
+        (payload) => {
+          const oldItem = payload.old as { id: string };
+          if (oldItem?.id) {
+            setLineItems((prev) => prev.filter((i) => i.id !== oldItem.id));
+          }
         }
       )
       .subscribe();
@@ -134,62 +204,7 @@ export function AdminDashboard({
     };
   }, [playAlert]);
 
-  // Polling loop to fetch new orders every 4s via API route (bypasses RLS limits)
-  useEffect(() => {
-    let active = true;
 
-    async function pollOrders() {
-      try {
-        const res = await fetch("/api/admin/orders");
-        if (!res.ok) return;
-        const data = await res.json();
-        if (!active) return;
-
-        if (Array.isArray(data.orders)) {
-          setOrders((prev) => {
-            const updatedList = [...prev];
-            let hasNew = false;
-
-            for (const incoming of data.orders as Order[]) {
-              const idx = updatedList.findIndex((o) => o.id === incoming.id);
-              if (idx >= 0) {
-                if (updatedList[idx].status !== incoming.status) {
-                  updatedList[idx] = { ...updatedList[idx], ...incoming };
-                }
-              } else {
-                hasNew = true;
-                updatedList.unshift(incoming);
-              }
-            }
-
-            if (hasNew) {
-              playAlert();
-            }
-
-            return updatedList;
-          });
-        }
-
-        if (Array.isArray(data.lineItems)) {
-          setLineItems((prev) => {
-            const existingIds = new Set(prev.map((i) => i.id));
-            const fresh = (data.lineItems as OrderItem[]).filter(
-              (i) => !existingIds.has(i.id)
-            );
-            return fresh.length > 0 ? [...prev, ...fresh] : prev;
-          });
-        }
-      } catch (err) {
-        console.error("Failed polling admin orders:", err);
-      }
-    }
-
-    const interval = setInterval(pollOrders, 4000);
-    return () => {
-      active = false;
-      clearInterval(interval);
-    };
-  }, [playAlert]);
 
   const fetchedOrderIdsRef = useRef<Set<string>>(new Set());
 
@@ -221,15 +236,24 @@ export function AdminDashboard({
     });
   }, [orders, lineItems, fetchLineItems]);
 
-  const filtered =
-    filter === "all" ? orders : orders.filter((o) => o.status === filter);
+  const RIDER_STATUSES: OrderStatus[] = ["picked_up", "out_for_delivery", "delivering"];
+  const DONE_STATUSES: OrderStatus[] = ["delivered", "completed"];
+
+  const filtered = filter === "all"
+    ? orders
+    : filter === "with_rider"
+    ? orders.filter((o) => RIDER_STATUSES.includes(o.status))
+    : filter === "delivered"
+    ? orders.filter((o) => DONE_STATUSES.includes(o.status))
+    : orders.filter((o) => o.status === filter);
 
   const counts = {
     all: orders.length,
     pending: orders.filter((o) => o.status === "pending").length,
     preparing: orders.filter((o) => o.status === "preparing").length,
     ready: orders.filter((o) => o.status === "ready").length,
-    completed: orders.filter((o) => o.status === "completed").length,
+    with_rider: orders.filter((o) => RIDER_STATUSES.includes(o.status)).length,
+    delivered: orders.filter((o) => DONE_STATUSES.includes(o.status)).length,
     cancelled: orders.filter((o) => o.status === "cancelled").length,
   };
 
@@ -366,13 +390,14 @@ export function AdminDashboard({
       ) : (
         <>
           {/* Stats bar */}
-          <div className="mx-auto max-w-7xl px-4 md:px-8 py-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          <div className="mx-auto max-w-7xl px-4 md:px-8 py-4 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
             {([
               { key: "all", label: "All", color: "var(--color-primary)" },
               { key: "pending", label: "Pending", color: "#f59e0b" },
               { key: "preparing", label: "Preparing", color: "#3b82f6" },
               { key: "ready", label: "Ready", color: "#8b5cf6" },
-              { key: "completed", label: "Completed", color: "var(--color-success)" },
+              { key: "with_rider", label: "With Rider", color: "#0ea5e9" },
+              { key: "delivered", label: "Delivered", color: "var(--color-success)" },
               { key: "cancelled", label: "Cancelled", color: "var(--color-error)" },
             ] as const).map((stat) => (
               <button
@@ -409,17 +434,148 @@ export function AdminDashboard({
               </div>
             ) : (
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                {filtered.map((order) => (
-                  <OrderCard
-                    key={order.id}
-                    order={order}
-                    items={lineItems.filter((i) => i.order_id === order.id)}
-                  />
-                ))}
+                {filtered.map((order) => {
+                  const orderItems = lineItems.filter((i) => i.order_id === order.id);
+                  const uniqueOrderItems = Array.from(
+                    new Map(orderItems.map((item) => [item.id, item])).values()
+                  );
+                  return (
+                    <OrderCard
+                      key={order.id}
+                      order={order}
+                      items={uniqueOrderItems}
+                      onPrint={(orderToPrint, itemsToPrint, width) =>
+                        handleOpenPrintPreview(orderToPrint, itemsToPrint, width ?? "80mm")
+                      }
+                    />
+                  );
+                })}
               </div>
             )}
           </div>
         </>
+      )}
+
+      {/* Printable Thermal Receipt Portal (attached directly to body for @media print isolation) */}
+      {mounted && printOrder && createPortal(
+        <div id="thermal-receipt-print-portal">
+          <ThermalReceipt
+            order={printOrder.order}
+            items={printOrder.items}
+            settings={settings}
+            paperWidth={printOrder.paperWidth}
+            isModalPreview={false}
+          />
+        </div>,
+        document.body
+      )}
+
+      {/* Thermal Receipt Preview & Print Modal */}
+      {showPrintModal && printOrder && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 animate-scale-in flex flex-col max-h-[90vh]">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200 mb-4">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-slate-800 text-[22px]">
+                  print
+                </span>
+                <h3 className="text-lg font-black text-slate-900">
+                  Thermal Receipt Preview
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPrintModal(false)}
+                className="p-1 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-800"
+              >
+                <span className="material-symbols-outlined text-[20px]">close</span>
+              </button>
+            </div>
+
+            {/* Paper Dimension Switcher */}
+            <div className="flex items-center justify-center bg-slate-100 p-1 rounded-xl mb-4 text-xs font-extrabold gap-1">
+              <button
+                type="button"
+                onClick={() => setPrintOrder({ ...printOrder, paperWidth: "80mm" })}
+                className={`flex-1 py-2 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                  printOrder.paperWidth === "80mm"
+                    ? "bg-white text-slate-900 shadow-xs font-black"
+                    : "text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                <span className="material-symbols-outlined text-[16px]">
+                  receipt
+                </span>
+                80mm Standard POS
+              </button>
+              <button
+                type="button"
+                onClick={() => setPrintOrder({ ...printOrder, paperWidth: "58mm" })}
+                className={`flex-1 py-2 rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                  printOrder.paperWidth === "58mm"
+                    ? "bg-white text-slate-900 shadow-xs font-black"
+                    : "text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                <span className="material-symbols-outlined text-[16px]">
+                  receipt_long
+                </span>
+                58mm Mini Roll
+              </button>
+            </div>
+
+            {/* Interactive Thermal Receipt Visual Preview Box */}
+            <div className="flex-1 overflow-y-auto bg-slate-100 p-4 rounded-2xl border border-slate-200 mb-5 flex justify-center slim-scrollbar">
+              <div
+                className={`bg-white shadow-md border border-slate-300 p-2 rounded transition-all ${
+                  printOrder.paperWidth === "58mm" ? "w-[58mm]" : "w-[80mm]"
+                }`}
+              >
+                <ThermalReceipt
+                  order={printOrder.order}
+                  items={printOrder.items}
+                  settings={settings}
+                  paperWidth={printOrder.paperWidth}
+                  isModalPreview={true}
+                />
+              </div>
+            </div>
+
+            {/* Modal Action Controls */}
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowPrintModal(false)}
+                className="flex-1 py-2.5 rounded-xl bg-slate-100 text-slate-700 font-bold text-xs hover:bg-slate-200 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => handleTriggerPrint(printOrder.paperWidth)}
+                disabled={isPrinting}
+                className="flex-1 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold text-xs transition-colors flex items-center justify-center gap-1.5 shadow-md disabled:opacity-50"
+              >
+                {isPrinting ? (
+                  <>
+                    <span className="animate-spin material-symbols-outlined text-[18px]">
+                      progress_activity
+                    </span>
+                    Printing...
+                  </>
+                ) : (
+                  <>
+                    <span className="material-symbols-outlined text-[18px]">
+                      print
+                    </span>
+                    Print Receipt
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
