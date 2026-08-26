@@ -5,7 +5,12 @@ import Image from "next/image";
 import { useCart } from "@/lib/cart-store";
 import { toast } from "sonner";
 import type { Item } from "@/lib/supabase/database.types";
-import { ProductDetailModal } from "./product-detail-modal";
+import dynamic from "next/dynamic";
+
+const ProductDetailModal = dynamic(
+  () => import("./product-detail-modal").then((m) => m.ProductDetailModal),
+  { ssr: false }
+);
 
 export function ProductCard({ item, isStoreActive }: { item: Item; isStoreActive: boolean }) {
   const add = useCart((s) => s.add);
@@ -27,7 +32,6 @@ export function ProductCard({ item, isStoreActive }: { item: Item; isStoreActive
       1
     );
     setAdded(true);
-    toast.success(`${item.name} added to cart`);
     setTimeout(() => setAdded(false), 1400);
   }
 

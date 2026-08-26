@@ -112,7 +112,6 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalProps) {
             return;
           }
 
-          const firstName = data.user.user_metadata?.full_name?.split(" ")[0] || "Valued Customer";
           window.dispatchEvent(
             new CustomEvent("azlan_user_logged_in", {
               detail: { user: data.user, provider: "email" },

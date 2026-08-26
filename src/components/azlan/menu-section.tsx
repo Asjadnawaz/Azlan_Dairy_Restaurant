@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { ProductCard } from "./product-card";
 import type { Item } from "@/lib/supabase/database.types";
+import { useStoreIsOpen } from "@/hooks/use-store-status";
 
 import { createBrowserClient } from "@/lib/supabase/client";
 
@@ -10,15 +11,12 @@ function slugify(s: string) {
   return s.toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
 
-export function MenuSection({
-  items: initialItems,
-  isStoreActive,
-}: {
-  items: Item[];
-  isStoreActive: boolean;
-}) {
+export function MenuSection({ items: initialItems }: { items: Item[] }) {
   const [realtimeItems, setRealtimeItems] = useState<Item[] | null>(null);
   const menuItems = realtimeItems ?? initialItems;
+  // Live, and it now accounts for the schedule and the admin's override rather
+  // than just the legacy `is_active` boolean.
+  const isStoreOpen = useStoreIsOpen();
 
   // Realtime listener for live price changes & availability
   useEffect(() => {
@@ -52,18 +50,27 @@ export function MenuSection({
     };
   }, [initialItems]);
 
-  // Group items by category preserves natural menu order
-  const categoryNames = Array.from(new Set(menuItems.map((i) => i.category)));
+  // Memoised because both feed effects below. `categoryNames` used to be a fresh
+  // array on every render *and* a dependency of the IntersectionObserver effect,
+  // so the observer was torn down and rebuilt on every single render.
+  const categoryNames = useMemo(
+    () => Array.from(new Set(menuItems.map((i) => i.category))),
+    [menuItems]
+  );
   const [activeCategory, setActiveCategory] = useState<string>(categoryNames[0] || "");
 
   const tabRef = useRef<HTMLDivElement>(null);
   const isClickScrolling = useRef<boolean>(false);
 
   // Grouped map: categoryName -> Array of Items
-  const groupedItems = categoryNames.reduce<Record<string, Item[]>>((acc, cat) => {
-    acc[cat] = menuItems.filter((i) => i.category === cat);
-    return acc;
-  }, {});
+  const groupedItems = useMemo(
+    () =>
+      categoryNames.reduce<Record<string, Item[]>>((acc, cat) => {
+        acc[cat] = menuItems.filter((i) => i.category === cat);
+        return acc;
+      }, {}),
+    [categoryNames, menuItems]
+  );
 
   // ScrollSpy: observe sections as user scrolls down page
   useEffect(() => {
@@ -115,7 +122,8 @@ export function MenuSection({
     if (targetEl) {
       const headerOffset = 135; // account for navbar + sticky category bar
       const elementPosition = targetEl.getBoundingClientRect().top;
-      const offsetPosition = elementPosition + window.pageYOffset - headerOffset;
+      // `window.pageYOffset` is the deprecated alias of scrollY.
+      const offsetPosition = elementPosition + window.scrollY - headerOffset;
 
       window.scrollTo({
         top: offsetPosition,
@@ -196,7 +204,7 @@ export function MenuSection({
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
                   {categoryItems.map((item) => (
-                    <ProductCard key={item.id} item={item} isStoreActive={isStoreActive} />
+                    <ProductCard key={item.id} item={item} isStoreActive={isStoreOpen} />
                   ))}
                 </div>
               )}

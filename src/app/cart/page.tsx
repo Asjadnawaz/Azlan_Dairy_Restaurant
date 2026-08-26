@@ -1,146 +1,241 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import dynamic from "next/dynamic";
-import Image from "next/image";
 import type { User } from "@supabase/supabase-js";
-import { useCart } from "@/lib/cart-store";
 import { toast } from "sonner";
-import { calculateDeliveryFromCoordinates, fetchRoadRoute, reverseGeocode } from "@/lib/delivery";
 
-// Leaflet accesses `window` at import time — must be loaded client-only
-const MapPicker = dynamic(
-  () => import("@/components/azlan/map-picker").then((mod) => mod.MapPicker),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="w-full h-64 rounded-[var(--radius-lg)] bg-slate-100 border border-slate-200 flex items-center justify-center">
-        <span className="text-xs text-slate-400 font-semibold">Loading map…</span>
-      </div>
-    ),
-  }
-);
-import { AuthModal } from "@/components/azlan/auth-modal";
+import { useCart } from "@/lib/cart-store";
+import { computeTotals, formatRupees } from "@/lib/cart-pricing";
+import { findCoupon, type Coupon } from "@/lib/coupons";
+import {
+  MAX_DELIVERY_RADIUS_KM,
+  calculateDeliveryFromCoordinates,
+  fetchRoadRoute,
+  reverseGeocode,
+} from "@/lib/delivery";
 import { getCurrentUser, onAuthStateChange } from "@/lib/supabase/auth";
-import { createBrowserClient } from "@/lib/supabase/client";
-import { getStoreOpenStatus } from "@/lib/store-hours";
+import dynamic from "next/dynamic";
+import { useStoreStatus } from "@/hooks/use-store-status";
+import { formatCountdown } from "@/lib/store-hours";
+
+const AuthModal = dynamic(
+  () => import("@/components/azlan/auth-modal").then((m) => m.AuthModal),
+  { ssr: false }
+);
+import { CartItems } from "@/components/azlan/cart/cart-items";
+import {
+  CheckoutForm,
+  normalizePhoneInput,
+  type CheckoutErrors,
+  type CheckoutFields,
+} from "@/components/azlan/cart/checkout-form";
+import { OrderSummary } from "@/components/azlan/cart/order-summary";
+
+/**
+ * Cart and checkout.
+ *
+ * Was a single 1,133-line client component holding both steps, with the coupon
+ * UI pasted in twice and the discount computed in the browser. Now the two views
+ * are components (src/components/azlan/cart/), the money comes from
+ * `computeTotals` — the same function POST /api/orders re-runs before it writes
+ * the row — and the coupon travels as a `coupon_code` the server resolves itself.
+ *
+ * Store status comes from the shared `useStoreStatus` hook rather than this
+ * page's own `settings` query, so the closed state here always agrees with the
+ * banner and the menu.
+ */
+
+const DEFAULT_DELIVERY_FEE = 60;
+
+type Confirmation = {
+  orderId: string;
+  orderNumber: string;
+  total: number;
+  itemCount: number;
+  name: string;
+  address: string;
+};
+
+const INITIAL_FIELDS: CheckoutFields = {
+  firstName: "",
+  lastName: "",
+  email: "",
+  phone: "03",
+  orderType: "delivery",
+  streetDetails: "",
+  address: "",
+  city: "Karachi",
+  district: "",
+  paymentMethod: "cod",
+  itemUnavailableAction: "Call me",
+  note: "",
+};
 
 export default function CartPage() {
-  const { items, updateQty, remove, clear, totalPrice, totalItems, _hasHydrated } = useCart();
+  const { items, updateQty, remove, clear, _hasHydrated } = useCart();
   const [activeStep, setActiveStep] = useState<"cart" | "checkout">("cart");
 
-  // Auth state
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
 
-  // Form state matching reference checkout design
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("03");
-  const [orderType, setOrderType] = useState<"delivery" | "pickup">("delivery");
-  const [streetDetails, setStreetDetails] = useState("");
-  const [address, setAddress] = useState("");
-  const [city, setCity] = useState("Karachi");
-  const [district, setDistrict] = useState("");
-  const [isGeocoding, setIsGeocoding] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<"cod" | "bank_transfer">("cod");
-  const [itemUnavailableAction, setItemUnavailableAction] = useState<"Call me" | "Cancel entire order">("Call me");
-  const [note, setNote] = useState("");
+  const [fields, setFields] = useState<CheckoutFields>(INITIAL_FIELDS);
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const [submitAttempted, setSubmitAttempted] = useState(false);
 
-  // Map & Delivery state
-  const [deliveryLocation, setDeliveryLocation] = useState<{ lat: number; lng: number } | null>(null);
-  const [deliveryFee, setDeliveryFee] = useState(60);
+  // Delivery
+  const [deliveryLocation, setDeliveryLocation] = useState<{ lat: number; lng: number } | null>(
+    null
+  );
+  const [deliveryFee, setDeliveryFee] = useState(DEFAULT_DELIVERY_FEE);
   const [deliveryDistance, setDeliveryDistance] = useState(0);
   const [deliveryBreakdown, setDeliveryBreakdown] = useState("");
+  const [isGeocoding, setIsGeocoding] = useState(false);
 
-  // Coupon state
   const [couponCode, setCouponCode] = useState("");
-  const [discount, setDiscount] = useState(0);
-  const [couponApplied, setCouponApplied] = useState(false);
-
   const [submitting, setSubmitting] = useState(false);
+  const [confirmed, setConfirmed] = useState<Confirmation | null>(null);
 
-  // Order confirmation state
-  const [confirmed, setConfirmed] = useState<{
-    orderId: string;
-    orderNumber: string;
-    total: number;
-    itemCount: number;
-    name: string;
-    address: string;
-    phone: string;
-  } | null>(null);
+  const store = useStoreStatus();
+  const isStoreOpen = store.isOpen;
 
-  // Store status
-  const [isStoreActive, setIsStoreActive] = useState(true);
+  const set = useCallback(
+    <K extends keyof CheckoutFields>(key: K, value: CheckoutFields[K]) => {
+      setFields((current) => ({ ...current, [key]: value }));
+    },
+    []
+  );
+
+  const touch = useCallback((key: keyof CheckoutFields | "location") => {
+    setTouched((current) => ({ ...current, [key]: true }));
+  }, []);
+
+  /* ---------------------------------------------------------------------- */
+  /* Auth prefill                                                           */
+  /* ---------------------------------------------------------------------- */
 
   useEffect(() => {
-    const supabase = createBrowserClient();
-    supabase
-      .from("settings")
-      .select("is_active")
-      .single()
-      .then(({ data }) => {
-        if (data && data.is_active !== undefined) {
-          setIsStoreActive(data.is_active);
-        }
-      });
-
-    const prefillUser = (u: User) => {
+    // Only ever fills blanks, so it cannot clobber something being typed.
+    const prefill = (u: User) => {
       setUserId(u.id);
-      
-      const meta = u.user_metadata || {};
-      
-      if (u.email) setEmail((current) => current || u.email || "");
-      if (typeof meta.phone === "string") setPhone((current) => current === "03" ? meta.phone : current);
-      if (typeof meta.first_name === "string") {
-        setFirstName((current) => current || meta.first_name);
-        if (typeof meta.last_name === "string") setLastName((current) => current || meta.last_name);
-      } else if (typeof meta.full_name === "string") {
-        const [givenName = "", ...remainingNames] = meta.full_name.split(" ");
-        setFirstName((current) => current || givenName);
-        setLastName((current) => current || remainingNames.join(" "));
-      }
+      const meta = (u.user_metadata ?? {}) as Record<string, unknown>;
+
+      setFields((current) => {
+        const next = { ...current };
+        if (u.email && !next.email) next.email = u.email;
+        if (typeof meta.phone === "string" && next.phone === "03") {
+          next.phone = normalizePhoneInput(meta.phone);
+        }
+        if (typeof meta.first_name === "string") {
+          if (!next.firstName) next.firstName = meta.first_name;
+          if (!next.lastName && typeof meta.last_name === "string") {
+            next.lastName = meta.last_name;
+          }
+        } else if (typeof meta.full_name === "string") {
+          const [given = "", ...rest] = meta.full_name.split(" ");
+          if (!next.firstName) next.firstName = given;
+          if (!next.lastName) next.lastName = rest.join(" ");
+        }
+        return next;
+      });
     };
 
     getCurrentUser()
       .then((user) => {
-        if (user) prefillUser(user);
+        if (user) prefill(user);
       })
-      .catch(() => { });
+      .catch(() => {
+        /* Not signed in — guest checkout is the normal path here. */
+      });
 
     const subscription = onAuthStateChange((event, session) => {
-      if (event === "SIGNED_IN" && session?.user) {
-        prefillUser(session.user);
-      } else if (event === "SIGNED_OUT") {
-        setUserId(null);
-      }
+      if (event === "SIGNED_IN" && session?.user) prefill(session.user);
+      else if (event === "SIGNED_OUT") setUserId(null);
     });
 
-    return () => {
-      subscription.unsubscribe();
-    };
+    return () => subscription.unsubscribe();
   }, []);
 
-  const subtotal = totalPrice();
-  const itemCount = totalItems();
-  const effectiveDeliveryFee = orderType === "pickup" ? 0 : deliveryFee;
-  const grandTotal = Math.max(0, subtotal + effectiveDeliveryFee - discount);
+  /* ---------------------------------------------------------------------- */
+  /* Money — one computation, shared with the server                        */
+  /* ---------------------------------------------------------------------- */
 
-  const handleLocationSelect = async (lat: number, lng: number) => {
+  const isPickup = fields.orderType === "pickup";
+  const coupon: Coupon | null = useMemo(() => findCoupon(couponCode), [couponCode]);
+
+  const totals = useMemo(
+    () =>
+      computeTotals({
+        items,
+        deliveryFee,
+        couponCode,
+        isPickup,
+      }),
+    [items, deliveryFee, couponCode, isPickup]
+  );
+
+  const itemCount = totals.itemCount;
+
+  /* ---------------------------------------------------------------------- */
+  /* Validation — per field, surfaced next to the field                     */
+  /* ---------------------------------------------------------------------- */
+
+  const allErrors = useMemo<CheckoutErrors>(() => {
+    const next: CheckoutErrors = {};
+
+    if (!fields.firstName.trim()) next.firstName = "We need a name for the order";
+
+    if (!/^03\d{9}$/.test(fields.phone.replace(/\D/g, ""))) {
+      next.phone = "Enter an 11-digit number starting 03, e.g. 03001234567";
+    }
+
+    if (fields.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fields.email.trim())) {
+      next.email = "That email address doesn't look right";
+    }
+
+    if (!isPickup) {
+      if (!fields.streetDetails.trim() && !fields.address.trim()) {
+        next.streetDetails = "Add your house # and gali # so the rider can find you";
+      }
+      if (!deliveryLocation) {
+        next.location = "Drop the pin on your delivery location";
+      } else if (deliveryDistance > MAX_DELIVERY_RADIUS_KM) {
+        next.location = `That pin is ${deliveryDistance.toFixed(1)} km away — outside our ${MAX_DELIVERY_RADIUS_KM} km radius`;
+      }
+    }
+
+    return next;
+  }, [fields, isPickup, deliveryLocation, deliveryDistance]);
+
+  const isValid = Object.keys(allErrors).length === 0;
+
+  // A pristine form should not be a wall of red. Errors appear once the field has
+  // been visited, or once submit has been pressed.
+  const visibleErrors = useMemo<CheckoutErrors>(() => {
+    if (submitAttempted) return allErrors;
+    const shown: CheckoutErrors = {};
+    for (const [key, message] of Object.entries(allErrors)) {
+      if (touched[key]) shown[key as keyof CheckoutErrors] = message;
+    }
+    return shown;
+  }, [allErrors, touched, submitAttempted]);
+
+  /* ---------------------------------------------------------------------- */
+  /* Location                                                               */
+  /* ---------------------------------------------------------------------- */
+
+  const handleLocationSelect = useCallback(async (lat: number, lng: number) => {
     setDeliveryLocation({ lat, lng });
     setIsGeocoding(true);
 
-    // Immediately show Haversine estimate while OSRM loads
-    const fallback = calculateDeliveryFromCoordinates(lat, lng);
-    setDeliveryDistance(fallback.distanceKm);
-    setDeliveryFee(fallback.deliveryFee);
-    setDeliveryBreakdown(fallback.breakdown + " (calculating road route & address…)");
+    // Show the straight-line estimate straight away so the total is never blank
+    // while OSRM and Nominatim are in flight.
+    const estimate = calculateDeliveryFromCoordinates(lat, lng);
+    setDeliveryDistance(estimate.distanceKm);
+    setDeliveryFee(estimate.deliveryFee);
+    setDeliveryBreakdown(`${estimate.breakdown} — checking the road route…`);
 
-    // Fetch road route and reverse geocode in parallel
-    const [route, geoResult] = await Promise.all([
+    const [route, geo] = await Promise.all([
       fetchRoadRoute(lat, lng),
       reverseGeocode(lat, lng),
     ]);
@@ -149,158 +244,120 @@ export default function CartPage() {
     setDeliveryFee(route.deliveryFee);
     setDeliveryBreakdown(route.breakdown);
 
-    if (geoResult) {
-      setAddress(geoResult.address);
-      if (geoResult.city) setCity(geoResult.city);
-      if (geoResult.district) setDistrict(geoResult.district);
+    if (geo) {
+      setFields((current) => ({
+        ...current,
+        address: geo.address,
+        city: geo.city || current.city,
+        district: geo.district || current.district,
+      }));
     }
     setIsGeocoding(false);
 
-    if (route.distanceKm > 5.0) {
+    if (route.distanceKm > MAX_DELIVERY_RADIUS_KM) {
       toast.error(
-        `Selected location (${route.distanceKm.toFixed(1)} km) is outside our 5 km delivery radius.`
+        `That location is ${route.distanceKm.toFixed(1)} km away — outside our ${MAX_DELIVERY_RADIUS_KM} km delivery radius.`
       );
     }
-  };
+  }, []);
 
-  const handleUseCurrentLocation = () => {
-    if (typeof window !== "undefined" && navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          handleLocationSelect(position.coords.latitude, position.coords.longitude);
-          toast.success("GPS Location captured successfully!");
-        },
-        () => {
-          toast.error("Could not fetch location automatically. Please use the map search below.");
-        }
-      );
+  const handleUseCurrentLocation = useCallback(() => {
+    if (!navigator.geolocation) {
+      toast.error("This browser cannot share your location. Please tap the map instead.");
+      return;
     }
-  };
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        touch("location");
+        void handleLocationSelect(position.coords.latitude, position.coords.longitude);
+        toast.success("Location captured.");
+      },
+      () => {
+        toast.error("Could not read your location. Please tap your spot on the map below.");
+      }
+    );
+  }, [handleLocationSelect, touch]);
 
-  const handleApplyCoupon = () => {
-    if (!couponCode.trim()) return;
-    const code = couponCode.trim().toUpperCase();
-    if (code === "AZLAN10" || code === "WELCOME10") {
-      const disc = Math.round(subtotal * 0.1);
-      setDiscount(disc);
-      setCouponApplied(true);
-      toast.success(`Coupon ${code} applied! 10% discount subtracted.`);
-    } else {
-      toast.error("Invalid coupon code. Try AZLAN10 for 10% OFF!");
+  /* ---------------------------------------------------------------------- */
+  /* Submit                                                                 */
+  /* ---------------------------------------------------------------------- */
+
+  const fullName = `${fields.firstName} ${fields.lastName}`.trim();
+
+  const buildAddress = useCallback((): string => {
+    if (isPickup) {
+      return "Store Pickup (Azlan Fast Food & BBQ Point, Malir, Karachi)";
     }
-  };
 
-  const fullName = `${firstName} ${lastName}`.trim();
-  const isTooFar = orderType === "delivery" && deliveryLocation !== null && deliveryDistance > 5.0;
-  const isWithinRadius = orderType === "pickup" || (deliveryLocation !== null && deliveryDistance <= 5.0);
+    const parts: string[] = [];
+    if (fields.streetDetails.trim()) parts.push(fields.streetDetails.trim());
+    if (fields.address.trim()) parts.push(fields.address.trim());
+    if (fields.city && !fields.address.toLowerCase().includes(fields.city.toLowerCase())) {
+      parts.push(fields.city);
+    }
+    if (
+      fields.district &&
+      !fields.address.toLowerCase().includes(fields.district.toLowerCase()) &&
+      fields.district !== "Malir District"
+    ) {
+      parts.push(fields.district);
+    }
 
-  const valid =
-    firstName.trim().length > 0 &&
-    (orderType === "pickup" || (streetDetails.trim().length > 0 || address.trim().length > 0)) &&
-    isWithinRadius &&
-    /^03\d{9}$/.test(phone.replace(/\D/g, ""));
+    let full = parts.join(", ");
+    // The `[GPS: …]` suffix is parsed by splitAddress() in src/lib/orders.ts and
+    // by the admin and rider screens — the format is load-bearing.
+    if (deliveryLocation) {
+      full += ` [GPS: ${deliveryLocation.lat.toFixed(5)}, ${deliveryLocation.lng.toFixed(5)}]`;
+    }
+    return full;
+  }, [fields, isPickup, deliveryLocation]);
 
-  const saveOrderToStorage = (
-    orderIdVal: string,
-    orderNumber: string,
-    phoneVal: string,
-    totalVal: number,
-    subtotalVal: number,
-    deliveryFeeVal: number,
-    nameVal: string,
-    addressVal: string,
-    itemsSnapshot: { id: string; name: string; price: number; quantity: number; image_path?: string | null }[]
-  ) => {
-    try {
-      const stored = JSON.parse(localStorage.getItem("azlan-orders") || "[]");
-      const newEntry = {
-        id: orderIdVal,
-        orderNumber,
-        phone: phoneVal,
-        total: totalVal,
-        subtotal: subtotalVal,
-        delivery_fee: deliveryFeeVal,
-        customer_name: nameVal,
-        customer_address: addressVal,
-        status: "pending",
-        timestamp: Date.now(),
-        items: itemsSnapshot,
-      };
-      const filtered = stored.filter(
-        (o: { orderNumber?: string; id?: string }) =>
-          o.orderNumber !== orderNumber && o.id !== orderIdVal
-      );
-      filtered.unshift(newEntry);
-      localStorage.setItem("azlan-orders", JSON.stringify(filtered.slice(0, 10)));
-    } catch { }
-  };
+  /** Same tag order the admin and rider screens expect. */
+  const buildNote = useCallback((): string => {
+    const tags = `[${fields.orderType.toUpperCase()}] [${fields.paymentMethod.toUpperCase()}] [If unavailable: ${fields.itemUnavailableAction}]`;
+    return fields.note.trim() ? `${tags} ${fields.note.trim()}` : tags;
+  }, [fields]);
 
   async function handleSubmitOrder() {
+    setSubmitAttempted(true);
+
     if (items.length === 0) {
-      toast.error("Your basket is empty");
+      toast.error("Your cart is empty.");
       return;
     }
-
-    if (!isStoreActive) {
-      toast.error("Store Closed. Please Try Again Later.");
+    if (!isStoreOpen) {
+      toast.error(
+        store.isWithinHours
+          ? "We have paused online orders for now. Please check back shortly."
+          : `We are closed right now — we open in ${formatCountdown(store.minutesUntilOpen)}.`
+      );
       return;
     }
-
-    if (orderType === "delivery" && deliveryDistance > 5.0) {
-      toast.error(`Your delivery location (${deliveryDistance.toFixed(1)} km) is outside our 5 km delivery radius.`);
+    if (!isValid) {
+      // Name the first actual problem rather than listing every field.
+      const first = Object.values(allErrors)[0];
+      toast.error(first ?? "Please complete the form.");
+      // Bring the offending field into view — a phone user may be far from it.
+      document
+        .querySelector('[aria-invalid="true"], [role="alert"]')
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
       return;
     }
-
-    if (!valid || submitting) {
-      toast.error("Please fill in required fields (Name, Phone number & Address)");
-      return;
-    }
+    if (submitting) return;
 
     setSubmitting(true);
+    const address = buildAddress();
 
     try {
-      // Check store operating hours & admin status before proceeding
-      const storeStatus = getStoreOpenStatus(isStoreActive);
-      if (!storeStatus.isOpen) {
-        toast.error(
-          storeStatus.reason === "closed_by_admin"
-            ? "Restaurant is currently paused for online orders. Please try again later."
-            : "Restaurant is closed. Operating hours are 7:00 PM to 4:00 AM."
-        );
-        setSubmitting(false);
-        return;
-      }
-
-      const cleanAddressParts = [];
-      if (streetDetails.trim()) cleanAddressParts.push(streetDetails.trim());
-      if (address.trim()) cleanAddressParts.push(address.trim());
-      if (city && !address.toLowerCase().includes(city.toLowerCase())) {
-        cleanAddressParts.push(city);
-      }
-      if (district && !address.toLowerCase().includes(district.toLowerCase()) && district !== "Malir District") {
-        cleanAddressParts.push(district);
-      }
-
-      let fullAddressString =
-        orderType === "pickup"
-          ? "Store Pickup (Azlan Fast Food & BBQ Point, Malir, Karachi)"
-          : cleanAddressParts.join(", ");
-
-      if (orderType === "delivery" && deliveryLocation) {
-        fullAddressString += ` [GPS: ${deliveryLocation.lat.toFixed(5)}, ${deliveryLocation.lng.toFixed(5)}]`;
-      }
-
       const res = await fetch("/api/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           customer_name: fullName,
-          customer_phone: phone,
-          customer_email: email.trim() || undefined,
-          customer_address: fullAddressString,
-          customer_note: note
-            ? `[${orderType.toUpperCase()}] [${paymentMethod.toUpperCase()}] [If unavailable: ${itemUnavailableAction}] ${note}`
-            : `[${orderType.toUpperCase()}] [${paymentMethod.toUpperCase()}] [If unavailable: ${itemUnavailableAction}]`,
+          customer_phone: fields.phone,
+          customer_email: fields.email.trim() || undefined,
+          customer_address: address,
+          customer_note: buildNote(),
           items: items.map((i) => ({
             id: i.id,
             name: i.name,
@@ -308,61 +365,76 @@ export default function CartPage() {
             image_path: i.image_path,
             quantity: i.quantity,
           })),
-          subtotal,
-          delivery_fee: effectiveDeliveryFee,
-          delivery_distance_km: orderType === "pickup" ? 0 : deliveryDistance,
+          subtotal: totals.subtotal,
+          delivery_fee: isPickup ? 0 : deliveryFee,
+          delivery_distance_km: isPickup ? 0 : deliveryDistance,
           delivery_coordinates: deliveryLocation,
-          total: grandTotal,
+          // The server resolves the code and re-derives the discount itself.
+          coupon_code: coupon?.code ?? null,
+          total: totals.total,
         }),
       });
 
-      const data = await res.json();
+      const data = (await res.json()) as {
+        error?: string;
+        order_id?: string;
+        order_number?: string;
+        total?: number;
+      };
 
       if (!res.ok) {
-        toast.error(data.error || "Failed to place order. Please try again.");
+        toast.error(data.error || "Could not place your order. Please try again.");
         return;
       }
 
-      const orderNumber = data.order_number ?? "AD-???";
-      const orderId = data.order_id;
-      const snapshot = {
-        orderId,
-        orderNumber,
-        total: grandTotal,
+      const snapshot: Confirmation = {
+        orderId: data.order_id ?? "",
+        orderNumber: data.order_number ?? "AD-???",
+        // The server's figure, not ours — if a price moved, this is what is owed.
+        total: data.total ?? totals.total,
         itemCount,
         name: fullName,
-        address: fullAddressString,
-        phone,
+        address,
       };
 
-      saveOrderToStorage(
-        orderId,
-        orderNumber,
-        phone,
-        grandTotal,
-        subtotal,
-        effectiveDeliveryFee,
-        fullName,
-        fullAddressString,
-        items.map((i) => ({ id: i.id, name: i.name, price: i.price, quantity: i.quantity, image_path: i.image_path }))
-      );
+      saveOrderToStorage(snapshot, fields.phone, totals.subtotal, totals.deliveryFee, items);
 
       clear();
       setConfirmed(snapshot);
-      toast.success(`Order ${orderNumber} placed successfully!`);
+      toast.success(`Order ${snapshot.orderNumber} placed.`);
     } catch (err) {
       console.error("Order submission failed:", err);
-      toast.error("Failed to place order. Please check your connection and try again.");
+      toast.error("Could not reach the kitchen. Please check your connection and try again.");
     } finally {
       setSubmitting(false);
     }
   }
 
-  if (!_hasHydrated) return null;
+  /* ---------------------------------------------------------------------- */
+  /* Render                                                                 */
+  /* ---------------------------------------------------------------------- */
+
+  // Zustand rehydrates from localStorage after mount. The page used to return
+  // `null` for that frame, so the whole screen was blank on every visit.
+  if (!_hasHydrated) return <CartSkeleton />;
+
+  const isEmpty = items.length === 0;
+  const summaryProps = {
+    totals,
+    coupon,
+    couponCode,
+    onApplyCoupon: (code: string) => {
+      setCouponCode(code);
+      toast.success(`${code} applied.`);
+    },
+    onClearCoupon: () => setCouponCode(""),
+    isPickup,
+    distanceKm: deliveryDistance,
+    feeIsEstimate: deliveryLocation === null,
+  };
 
   return (
-    <div className="min-h-screen bg-white text-[var(--color-on-surface)] pt-6 pb-20 px-4 md:px-8">
-      {/* Auth Modal */}
+    <div className="min-h-screen bg-white px-4 pt-6 pb-28 text-[var(--color-on-surface)] md:px-8 lg:pb-20">
       <AuthModal
         isOpen={showAuthModal}
         onClose={() => setShowAuthModal(false)}
@@ -372,762 +444,465 @@ export default function CartPage() {
         }}
       />
 
-      <div className="max-w-7xl mx-auto">
-        {/* Header & Step Navigation */}
-        <div className="mb-4 sm:mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-3 sm:gap-4 border-b border-slate-200 pb-4 sm:pb-6">
-          <div>
-            <h1 className="font-integral text-2xl sm:text-5xl text-slate-950 uppercase tracking-tight">
-              {activeStep === "cart" ? (
-                <>YOUR <span className="text-green-700 italic">CART.</span></>
-              ) : (
-                <>SECURE <span className="text-green-700 italic">CHECKOUT.</span></>
-              )}
-            </h1>
-          </div>
+      <div className="mx-auto max-w-7xl">
+        <CartHeader
+          activeStep={activeStep}
+          itemCount={itemCount}
+          showSteps={!isEmpty}
+          onStep={setActiveStep}
+        />
 
-          {items.length > 0 && (
-            <div className="flex items-center gap-1.5 sm:gap-2 bg-slate-100 p-1 sm:p-1.5 rounded-2xl border border-slate-200 self-start md:self-auto max-w-full overflow-x-auto">
-              <button
-                type="button"
-                onClick={() => setActiveStep("cart")}
-                className={`px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl font-bold text-[11px] sm:text-sm transition-all flex items-center gap-1.5 sm:gap-2 whitespace-nowrap ${activeStep === "cart"
-                  ? "bg-[#00230c] text-white shadow-md"
-                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/50"
-                  }`}
-              >
-                <span className="w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-[#FFC700] text-slate-950 flex items-center justify-center font-black text-[10px] sm:text-[11px] shrink-0">1</span>
-                YOUR CART ({itemCount})
-              </button>
-
-              <span className="text-slate-300 font-extrabold text-xs shrink-0">➔</span>
-
-              <button
-                type="button"
-                onClick={() => setActiveStep("checkout")}
-                className={`px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl font-bold text-[11px] sm:text-sm transition-all flex items-center gap-1.5 sm:gap-2 whitespace-nowrap ${activeStep === "checkout"
-                  ? "bg-[#00230c] text-white shadow-md"
-                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/50"
-                  }`}
-              >
-                <span className="w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-[#FFC700] text-slate-950 flex items-center justify-center font-black text-[10px] sm:text-[11px] shrink-0">2</span>
-                CHECKOUT
-              </button>
-            </div>
-          )}
-        </div>
-
-        {items.length === 0 ? (
-          <div className="bg-slate-50 rounded-3xl p-12 text-center max-w-xl mx-auto my-12 border border-slate-200 shadow-sm">
-            <span className="material-symbols-outlined text-[72px] text-slate-400 mb-4">
-              shopping_bag
-            </span>
-            <h2 className="text-2xl font-bold text-slate-900 mb-2">Your Cart is Empty</h2>
-            <p className="text-sm text-slate-600 mb-6">
-              Looks like you haven&apos;t added any delicious items yet!
+        {!isStoreOpen && !isEmpty && (
+          <div className="mb-5 flex items-start gap-2.5 rounded-2xl border border-amber-200 bg-amber-50 p-3.5 text-xs font-semibold text-amber-900">
+            <span className="material-symbols-outlined mt-0.5 shrink-0 text-[18px]">schedule</span>
+            <p className="leading-snug">
+              We&apos;re closed right now
+              {store.isWithinHours
+                ? " — online orders are paused."
+                : `. We open in ${formatCountdown(store.minutesUntilOpen)} (${store.operatingHoursText}).`}{" "}
+              Build your cart now and it will be waiting for you.
             </p>
-            <Link
-              href="/"
-              className="inline-flex items-center justify-center px-8 py-3.5 rounded-full bg-[#00230c] text-white font-extrabold text-sm hover:bg-slate-800 transition-all shadow-md"
-            >
-              BROWSE MENU
-            </Link>
           </div>
+        )}
+
+        {isEmpty ? (
+          <EmptyCart />
         ) : activeStep === "cart" ? (
-          /* ========================================== */
-          /* STEP 1: DEDICATED CART PAGE VIEW */
-          /* ========================================== */
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-            {/* Left Column: Full Cart Items List */}
-            <div className="lg:col-span-8 space-y-4">
-              <div className="bg-white border border-slate-200/80 rounded-3xl p-4 sm:p-8 shadow-md backdrop-blur-md">
-                {/* Header */}
-                <div className="flex items-center justify-between border-b border-slate-100 pb-4 sm:pb-5 mb-6">
-                  <div className="flex items-center gap-1.5 sm:gap-3 min-w-0">
-                    <h2 className="font-integral mt-[-5px] text-xl sm:text-2xl text-slate-950 uppercase tracking-wide whitespace-nowrap">
-                      Cart Items
-                    </h2>
-                    <span className="px-2.5 sm:px-4 py-1.5 sm:py-1.5 rounded-full bg-[#00230c] text-[#FFC700] font-black text-[10px] sm:text-xs shadow-xs shrink-0">
-                      {itemCount} {itemCount === 1 ? "Item" : "Items"}
-                    </span>
-                  </div>
-                  <button
-                    onClick={clear}
-                    className="inline-flex items-center gap-1 px-1.5 sm:px-3.5 py-0.5 sm:py-1.5 rounded-full border border-rose-200/80 bg-rose-50/60 text-[10px] sm:text-xs font-bold text-rose-600 hover:bg-rose-600 hover:text-white transition-all shadow-xs shrink-0 whitespace-nowrap"
-                  >
-                    <span className="material-symbols-outlined text-[10px] sm:text-[16px]">delete_sweep</span>
-                    Clear All
-                  </button>
-                </div>
-
-                {/* Items List */}
-                <div className="space-y-4">
-                  {items.map((item) => (
-                    <div
-                      key={item.id}
-                      className="group p-3.5 sm:p-5 rounded-2xl border border-slate-100 bg-slate-50/60 hover:bg-white hover:border-emerald-500/30 hover:shadow-lg hover:shadow-emerald-900/5 transition-all duration-300 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 overflow-hidden"
-                    >
-                      <div className="flex items-center gap-3 sm:gap-4 min-w-0">
-                        <div className="relative shrink-0">
-                          <Image
-                            src={item.image_path || "/images/burger.jpg"}
-                            alt={item.name}
-                            width={88}
-                            height={88}
-                            sizes="88px"
-                            className="w-16 h-16 sm:w-22 sm:h-22 rounded-2xl object-cover ring-1 ring-slate-200/70 group-hover:ring-emerald-500/40 group-hover:scale-105 transition-all duration-300 shadow-sm"
-                          />
-                        </div>
-                        <div className="space-y-1 min-w-0">
-                          <h3 className="font-bold text-base sm:text-lg text-slate-900 group-hover:text-[#00230c] transition-colors leading-tight truncate">
-                            {item.name}
-                          </h3>
-                          <div className="flex items-center gap-2">
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-emerald-100/80 text-emerald-900 border border-emerald-200/50">
-                              Rs. {item.price} <span className="text-[10px] font-medium text-emerald-700 ml-1">/ unit</span>
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-5 pt-3 sm:pt-0 border-t sm:border-t-0 border-slate-200/50 w-full sm:w-auto">
-                        {/* Quantity Counter */}
-                        <div className="flex items-center bg-white rounded-full border border-slate-200 p-0.5 sm:p-1 shadow-xs shrink-0">
-                          <button
-                            onClick={() => updateQty(item.id, -1)}
-                            className="w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-slate-700 font-bold hover:bg-[#00230c] hover:text-[#FFC700] active:scale-95 transition-all"
-                            title="Decrease quantity"
-                          >
-                            <span className="material-symbols-outlined text-[14px] sm:text-[16px]">remove</span>
-                          </button>
-                          <span className="w-7 sm:w-9 text-center font-black text-xs sm:text-sm text-slate-900">
-                            {item.quantity}
-                          </span>
-                          <button
-                            onClick={() => updateQty(item.id, 1)}
-                            className="w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-slate-700 font-bold hover:bg-[#00230c] hover:text-[#FFC700] active:scale-95 transition-all"
-                            title="Increase quantity"
-                          >
-                            <span className="material-symbols-outlined text-[14px] sm:text-[16px]">add</span>
-                          </button>
-                        </div>
-
-                        {/* Price Total */}
-                        <div className="text-right shrink-0">
-                          <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Total</p>
-                          <p className="font-black text-base sm:text-xl text-[#00230c]">
-                            Rs.{item.price * item.quantity}
-                          </p>
-                        </div>
-
-                        {/* Remove Button */}
-                        <button
-                          onClick={() => remove(item.id)}
-                          className="p-1.5 sm:p-2 rounded-full text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-all shrink-0"
-                          title="Remove item"
-                        >
-                          <span className="material-symbols-outlined text-[18px] sm:text-[20px]">delete</span>
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Bottom Actions */}
-              <div className="flex items-center justify-between pt-2">
-                <Link
-                  href="/"
-                  className="inline-flex items-center gap-2 text-xs font-extrabold text-[#00230c] hover:underline"
-                >
-                  <span>←</span> Continue Shopping
-                </Link>
-              </div>
+          <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-12">
+            <div className="lg:col-span-8">
+              <CartItems
+                items={items}
+                itemCount={itemCount}
+                onInc={(id) => updateQty(id, 1)}
+                onDec={(id) => updateQty(id, -1)}
+                onRemove={remove}
+                onClear={clear}
+              />
             </div>
 
-            {/* Right Column: Cart Summary & Checkout Trigger */}
-            <div className="lg:col-span-4 sticky top-24">
-              <div className="bg-[#023020] text-white rounded-3xl p-4 sm:p-8 shadow-2xl border border-zinc-800 space-y-4 sm:space-y-6">
-                <h2 className="font-integral text-lg sm:text-2xl text-white uppercase tracking-wide">
-                  CART SUMMARY
-                </h2>
-
-                {/* Coupon Code input */}
-                <div className="pt-1">
-                  <div className="flex items-center bg-zinc-900 border border-zinc-800 rounded-xl p-1.5 focus-within:border-[#FFC700] transition-colors">
-                    <input
-                      type="text"
-                      placeholder="Coupon code"
-                      value={couponCode}
-                      onChange={(e) => setCouponCode(e.target.value)}
-                      disabled={couponApplied}
-                      className="w-full bg-transparent px-3 text-xs text-white placeholder-zinc-500 focus:outline-none uppercase font-bold"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleApplyCoupon}
-                      disabled={couponApplied}
-                      className="px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg bg-[#FFC700] text-black font-black text-[11px] sm:text-xs uppercase hover:bg-blue-700 transition-colors shrink-0 disabled:opacity-50"
-                    >
-                      {couponApplied ? "Applied" : "Apply"}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Calculations */}
-                <div className="space-y-2.5 sm:space-y-3 text-xs sm:text-sm font-semibold pt-1">
-                  <div className="flex justify-between items-center text-zinc-300">
-                    <span>Subtotal</span>
-                    <span className="font-bold text-white">Rs.{subtotal}</span>
-                  </div>
-
-                  <div className="flex justify-between items-center text-zinc-300">
-                    <span>Estimated Delivery</span>
-                    <span className="font-bold text-white">Rs.{effectiveDeliveryFee}</span>
-                  </div>
-
-                  {discount > 0 && (
-                    <div className="flex justify-between items-center text-amber-400">
-                      <span>Discount</span>
-                      <span className="font-bold">- Rs.{discount}</span>
-                    </div>
-                  )}
-
-                  {/* Divider line */}
-                  <div className="pt-3 sm:pt-4 border-t border-zinc-800 flex justify-between items-center">
-                    <span className="font-integral text-sm sm:text-lg uppercase text-[#FFC700] font-black">
-                      Total
-                    </span>
-                    <span className="font-black text-xl sm:text-3xl text-[#FFC700]">
-                      Rs.{grandTotal}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Proceed to Checkout Button */}
+            {/* The dark panel is desktop-only; on a phone the sticky bar below
+                carries the total and the next action instead. */}
+            <div className="hidden lg:col-span-4 lg:block lg:sticky lg:top-24">
+              <OrderSummary title="Cart Summary" {...summaryProps}>
                 <button
                   type="button"
                   onClick={() => setActiveStep("checkout")}
-                  className="group relative overflow-hidden font-integral text-xs sm:text-base uppercase tracking-wider font-black w-full py-3.5 sm:py-4 text-center rounded-full bg-gradient-to-r from-[#FFC700] via-[#ffd736] to-[#FFC700] text-[#00230C] hover:text-[#001507] shadow-xl shadow-amber-500/25 hover:shadow-amber-400/40 hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 flex items-center justify-center gap-2 border border-white/60 hover:cursor-pointer"
+                  className="flex w-full items-center justify-center gap-2 rounded-full border border-white/60 bg-gradient-to-r from-[#FFC700] via-[#ffd736] to-[#FFC700] py-4 text-base font-black uppercase tracking-wider text-[#00230C] shadow-xl shadow-amber-500/25 transition-all hover:scale-[1.02] hover:shadow-amber-400/40 active:scale-[0.98]"
                 >
-                  <span className="absolute inset-0 w-1/2 h-full bg-white/30 skew-x-[-20deg] -translate-x-full group-hover:translate-x-[300%] transition-transform duration-1000 ease-in-out" />
-                  <span>PROCEED TO CHECKOUT</span>
-                  <span className="material-symbols-outlined text-[18px] sm:text-[22px] font-black group-hover:translate-x-1.5 transition-transform duration-300">
+                  Proceed to Checkout
+                  <span className="material-symbols-outlined text-[22px] font-black">
                     arrow_forward
                   </span>
                 </button>
-              </div>
+              </OrderSummary>
             </div>
           </div>
         ) : (
-          /* ========================================== */
-          /* STEP 2: DEDICATED CHECKOUT PAGE VIEW */
-          /* ========================================== */
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10 items-start">
-            {/* Left Column: Input Form Cards */}
-            <div className="lg:col-span-7 xl:col-span-8 space-y-6">
-              {/* Back to Cart Bar */}
-              <div className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-2xl p-3.5 sm:p-4">
-                <button
-                  type="button"
-                  onClick={() => setActiveStep("cart")}
-                  className="w-full sm:w-auto inline-flex items-center gap-2 text-xs sm:text-sm font-extrabold text-[#00230c] hover:underline"
-                >
-                  <span>←</span> Back to Cart ({itemCount} items)
-                </button>
-                <span className="hidden sm:inline text-xs font-bold text-slate-500 shrink-0">
-                  Step 2 of 2: Checkout Details
-                </span>
-              </div>
+          <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-12 lg:gap-10">
+            <div className="lg:col-span-7 xl:col-span-8">
+              <CheckoutForm
+                fields={fields}
+                set={set}
+                errors={visibleErrors}
+                touch={touch}
+                isSignedIn={userId !== null}
+                onSignIn={() => setShowAuthModal(true)}
+                itemCount={itemCount}
+                onBackToCart={() => setActiveStep("cart")}
+                deliveryLocation={deliveryLocation}
+                deliveryDistance={deliveryDistance}
+                deliveryFee={deliveryFee}
+                deliveryBreakdown={deliveryBreakdown}
+                isGeocoding={isGeocoding}
+                onLocationSelect={handleLocationSelect}
+                onUseCurrentLocation={handleUseCurrentLocation}
+                maxDistanceKm={MAX_DELIVERY_RADIUS_KM}
+              />
 
-              {/* Guest / Member Banner */}
-              {!userId ? (
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 sm:p-4 rounded-2xl bg-emerald-50/90 border border-emerald-200 text-xs shadow-xs">
-                  <div className="flex items-center gap-2.5 text-emerald-950 font-medium">
-                    <span className="material-symbols-outlined text-[24px] text-emerald-600 shrink-0">
-                      flash_on
-                    </span>
-                    <div>
-                      <p className="font-extrabold text-xs text-emerald-950">
-                        Guest Checkout Active (No Login Required)
-                      </p>
-                      <p className="text-[11px] text-emerald-800">
-                        Have an account? Sign in with Google to auto-fill your name & address.
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setShowAuthModal(true)}
-                    className="px-4 py-2 rounded-xl bg-[#00230c] hover:bg-[#073615] text-[#FFC700] font-bold text-xs transition-all shadow-xs shrink-0 self-start sm:self-auto cursor-pointer"
-                  >
-                    Sign In / Google
-                  </button>
-                </div>
-              ) : (
-                <div className="flex items-center justify-between p-3 sm:p-3.5 rounded-2xl bg-slate-100 border border-slate-200 text-xs">
-                  <div className="flex items-center gap-2 text-slate-800 font-semibold">
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" />
-                    <span>Signed in as <strong>{firstName || "Valued Member"}</strong></span>
-                  </div>
-                </div>
-              )}
-
-              {/* 1. CONTACT CARD */}
-              <div className="bg-slate-50/60 border border-slate-200 rounded-3xl p-4 sm:p-8 space-y-3 sm:space-y-4">
-                <h2 className="font-integral text-lg sm:text-2xl text-slate-950 uppercase tracking-wide">
-                  CONTACT
-                </h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                  <div>
-                    <input
-                      type="text"
-                      placeholder="First Name *"
-                      value={firstName}
-                      onChange={(e) => setFirstName(e.target.value)}
-                      className="w-full h-11 sm:h-12 rounded-xl bg-slate-100/80 border border-slate-200 px-3.5 sm:px-4 text-xs sm:text-sm font-medium focus:outline-none focus:border-slate-950 focus:bg-white transition-all"
-                    />
-                  </div>
-                  <div>
-                    <input
-                      type="text"
-                      placeholder="Last Name"
-                      value={lastName}
-                      onChange={(e) => setLastName(e.target.value)}
-                      className="w-full h-11 sm:h-12 rounded-xl bg-slate-100/80 border border-slate-200 px-3.5 sm:px-4 text-xs sm:text-sm font-medium focus:outline-none focus:border-slate-950 focus:bg-white transition-all"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <input
-                    type="email"
-                    placeholder="Email (for confirmation)"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="w-full h-11 sm:h-12 rounded-xl bg-slate-100/80 border border-slate-200 px-3.5 sm:px-4 text-xs sm:text-sm font-medium focus:outline-none focus:border-slate-950 focus:bg-white transition-all"
-                  />
-                </div>
-                <div>
-                  <input
-                    type="tel"
-                    placeholder="Phone *"
-                    value={phone}
-                    onChange={(e) => {
-                      let val = e.target.value;
-                      const digits = val.replace(/\D/g, "");
-                      if (digits.length === 0) {
-                        val = "03";
-                      } else if (digits.startsWith("03")) {
-                        val = digits.slice(0, 11);
-                      } else if (digits.startsWith("3")) {
-                        val = "0" + digits.slice(0, 10);
-                      } else if (digits.startsWith("923")) {
-                        val = "0" + digits.slice(2, 12);
-                      } else {
-                        val = "03" + digits.slice(0, 9);
-                      }
-                      setPhone(val);
-                    }}
-                    maxLength={11}
-                    className="w-full h-11 sm:h-12 rounded-xl bg-slate-100/80 border border-slate-200 px-3.5 sm:px-4 text-xs sm:text-sm font-bold focus:outline-none focus:border-slate-950 focus:bg-white transition-all"
-                  />
-                </div>
-              </div>
-              <p className="text-[11px] sm:text-xs text-slate-500 font-medium px-2 sm:px-4 -mt-2">
-                No account required! Just enter your Name & Phone to place your order directly.
-              </p>
-
-              {/* 2. ORDER TYPE CARD */}
-              <div className="bg-slate-50/60 border border-slate-200 rounded-3xl p-4 sm:p-8 space-y-3 sm:space-y-4">
-                <h2 className="font-integral text-lg sm:text-2xl text-slate-950 uppercase tracking-wide">
-                  ORDER TYPE
-                </h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                  {/* Delivery Toggle */}
-                  <button
-                    type="button"
-                    onClick={() => setOrderType("delivery")}
-                    className={`p-3 sm:p-4 rounded-2xl border-2 text-left transition-all flex items-center gap-3 ${orderType === "delivery"
-                      ? "border-[#FFC700] bg-[#FFFBEA]"
-                      : "border-slate-200 bg-slate-100/80 hover:bg-slate-100"
-                      }`}
-                  >
-                    <span className="text-xl sm:text-2xl">🚚</span>
-                    <div>
-                      <p className="font-extrabold text-xs sm:text-sm text-slate-950">Delivery</p>
-                      <p className="text-[11px] sm:text-xs text-slate-500">To your door in Malir</p>
-                    </div>
-                  </button>
-
-                  {/* Pickup Toggle */}
-                  <button
-                    type="button"
-                    onClick={() => setOrderType("pickup")}
-                    className={`p-3 sm:p-4 rounded-2xl border-2 text-left transition-all flex items-center gap-3 ${orderType === "pickup"
-                      ? "border-[#FFC700] bg-[#FFFBEA]"
-                      : "border-slate-200 bg-slate-100/80 hover:bg-slate-100"
-                      }`}
-                  >
-                    <span className="text-xl sm:text-2xl">🏪</span>
-                    <div>
-                      <p className="font-extrabold text-xs sm:text-sm text-slate-950">Pickup</p>
-                      <p className="text-[11px] sm:text-xs text-slate-500">From store · No delivery fee</p>
-                    </div>
-                  </button>
-                </div>
-              </div>
-
-              {/* 3. DELIVERY ADDRESS CARD (Only when Delivery) */}
-              {orderType === "delivery" && (
-                <div className="bg-slate-50/60 border border-slate-200 rounded-3xl p-4 sm:p-8 space-y-3 sm:space-y-4">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <h2 className="font-integral text-lg sm:text-2xl text-slate-950 uppercase tracking-wide">
-                      DELIVERY ADDRESS
-                    </h2>
-                    <button
-                      type="button"
-                      onClick={handleUseCurrentLocation}
-                      className="inline-flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-lg bg-blue-50 text-blue-600 border border-blue-200 text-[11px] sm:text-xs font-bold hover:bg-blue-100 transition-colors"
-                    >
-                      <span>📍</span> Use Current Location
-                    </button>
-                  </div>
-
-                  <div className="p-3 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-950 text-xs font-medium flex items-start gap-2.5 shadow-xs">
-                    <span className="material-symbols-outlined text-[20px] text-emerald-700 shrink-0 mt-0.5">
-                      home_pin
-                    </span>
-                    <div>
-                      <p className="font-extrabold text-xs text-emerald-950">House # & Gali / Street # Required</p>
-                      <p className="text-[11px] text-emerald-800 leading-tight">
-                        Map pins detect general areas (e.g. Khokhrapar). Please enter your exact <strong>House #, Gali #, and Landmark</strong> below so our rider delivers directly to your door!
-                      </p>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-black text-emerald-950 uppercase tracking-wide mb-1.5">
-                      House #, Gali / Street # & Nearby Landmark <span className="text-rose-600">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={streetDetails}
-                      onChange={(e) => setStreetDetails(e.target.value)}
-                      placeholder="e.g. House # 45, Gali / Street # 3, Near Jamia Masjid"
-                      className="w-full h-11 sm:h-12 rounded-xl bg-white border-2 border-emerald-600/60 px-3.5 sm:px-4 text-xs sm:text-sm font-bold text-slate-900 focus:outline-none focus:border-emerald-700 focus:ring-2 focus:ring-emerald-600/20 transition-all shadow-xs"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-extrabold text-slate-700 uppercase tracking-wide mb-1.5">
-                      Detected Area / Sector (Auto-filled from Map Pin)
-                    </label>
-                    <input
-                      type="text"
-                      value={address}
-                      onChange={(e) => setAddress(e.target.value)}
-                      placeholder={isGeocoding ? "Detecting area from map pin..." : "e.g. Khokhrapar No 1, Malir"}
-                      className="w-full h-11 sm:h-12 rounded-xl bg-slate-100/80 border border-slate-200 px-3.5 sm:px-4 text-xs sm:text-sm font-semibold text-slate-700 focus:outline-none focus:border-slate-950 focus:bg-white transition-all"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                    <div>
-                      <input
-                        type="text"
-                        value={city}
-                        onChange={(e) => setCity(e.target.value)}
-                        placeholder="City"
-                        className="w-full h-11 sm:h-12 rounded-xl bg-slate-100/80 border border-slate-200 px-3.5 sm:px-4 text-xs sm:text-sm font-medium focus:outline-none focus:border-slate-950 focus:bg-white transition-all"
-                      />
-                    </div>
-                    <div>
-                      <input
-                        type="text"
-                        value={district}
-                        onChange={(e) => setDistrict(e.target.value)}
-                        placeholder="District / Area"
-                        className="w-full h-11 sm:h-12 rounded-xl bg-slate-100/80 border border-slate-200 px-3.5 sm:px-4 text-xs sm:text-sm font-medium focus:outline-none focus:border-slate-950 focus:bg-white transition-all"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="pt-2">
-                    <label className="block text-xs font-bold text-slate-700 mb-2">
-                      Drag the pin to your exact delivery location:
-                    </label>
-                    <MapPicker
-                      onLocationSelect={handleLocationSelect}
-                      initialLocation={deliveryLocation || undefined}
-                    />
-                    {deliveryBreakdown && (
-                      <p className="mt-2 text-xs text-slate-600 bg-slate-100 p-2.5 rounded-xl border border-slate-200">
-                        💡 {deliveryBreakdown}
-                      </p>
-                    )}
-                    {isTooFar && (
-                      <div className="mt-3 p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold flex items-start gap-2.5 shadow-xs">
-                        <span className="material-symbols-outlined text-[20px] text-rose-600 shrink-0 mt-0.5">
-                          error
-                        </span>
-                        <div>
-                          <p className="font-extrabold text-sm text-rose-900">Delivery Unavailable (Too Far)</p>
-                          <p className="mt-0.5 font-medium text-rose-700 leading-snug">
-                            Selected location is <strong>{deliveryDistance.toFixed(1)} km</strong> away. We only deliver within a <strong>5 KM road distance</strong> of our store. Please select a closer location.
-                          </p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* 4. PAYMENT CARD */}
-              <div className="bg-slate-50/60 border border-slate-200 rounded-3xl p-4 sm:p-8 space-y-3 sm:space-y-4">
-                <h2 className="font-integral text-lg sm:text-2xl text-slate-950 uppercase tracking-wide">
-                  PAYMENT
-                </h2>
-                <div className="space-y-2.5 sm:space-y-3">
-                  {/* COD */}
-                  <label
-                    className={`flex items-center gap-3 p-3 sm:p-4 rounded-2xl border-2 cursor-pointer transition-all ${paymentMethod === "cod"
-                      ? "border-[#FFC700] bg-[#FFFBEA]"
-                      : "border-slate-200 bg-slate-100/80 hover:bg-slate-100"
-                      }`}
-                  >
-                    <input
-                      type="radio"
-                      name="payment"
-                      checked={paymentMethod === "cod"}
-                      onChange={() => setPaymentMethod("cod")}
-                      className="w-4 h-4 accent-amber-500"
-                    />
-                    <div>
-                      <p className="font-extrabold text-xs sm:text-sm text-slate-950 flex items-center gap-1.5">
-                        💵 Cash on Delivery
-                      </p>
-                      <p className="text-[11px] sm:text-xs text-slate-500">Pay when you receive your order</p>
-                    </div>
-                  </label>
-
-                  {/* Bank Transfer */}
-                  <label
-                    className={`flex items-center gap-3 p-3 sm:p-4 rounded-2xl border-2 cursor-pointer transition-all ${paymentMethod === "bank_transfer"
-                      ? "border-[#FFC700] bg-[#FFFBEA]"
-                      : "border-slate-200 bg-slate-100/80 hover:bg-slate-100"
-                      }`}
-                  >
-                    <input
-                      type="radio"
-                      name="payment"
-                      checked={paymentMethod === "bank_transfer"}
-                      onChange={() => setPaymentMethod("bank_transfer")}
-                      className="w-4 h-4 accent-amber-500"
-                    />
-                    <div>
-                      <p className="font-extrabold text-xs sm:text-sm text-slate-950 flex items-center gap-1.5">
-                        🏦 Bank Transfer
-                      </p>
-                      <p className="text-[11px] sm:text-xs text-slate-500">Send screenshot via WhatsApp after ordering</p>
-                    </div>
-                  </label>
-                </div>
-
-                {/* Dropdown: If an item is unavailable, how should we proceed? */}
-                <div className="pt-2 sm:pt-3">
-                  <label className="block text-xs sm:text-sm font-bold text-slate-900 mb-1.5">
-                    If an item is unavailable, how should we proceed?
-                  </label>
-                  <div className="relative">
-                    <select
-                      value={itemUnavailableAction}
-                      onChange={(e) => setItemUnavailableAction(e.target.value as "Call me" | "Cancel entire order")}
-                      className="w-full h-11 sm:h-12 rounded-xl bg-slate-100/80 border border-slate-200 px-3.5 sm:px-4 text-xs sm:text-sm font-semibold text-slate-900 focus:outline-none focus:border-slate-950 focus:bg-white transition-all cursor-pointer appearance-none pr-10"
-                    >
-                      <option value="Call me">Call me</option>
-                      <option value="Cancel entire order">Cancel entire order</option>
-                    </select>
-                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-600">
-                      <span className="material-symbols-outlined text-[20px]">expand_more</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="pt-1 sm:pt-2">
-                  <input
-                    type="text"
-                    placeholder="Special instructions (optional)"
-                    value={note}
-                    onChange={(e) => setNote(e.target.value)}
-                    className="w-full h-11 sm:h-12 rounded-xl bg-slate-100/80 border border-slate-200 px-3.5 sm:px-4 text-xs sm:text-sm font-medium focus:outline-none focus:border-slate-950 focus:bg-white transition-all"
-                  />
-                </div>
-
-                {/* Big Yellow CTA Button */}
-                <div className="pt-3 sm:pt-4">
-                  <button
-                    type="button"
-                    onClick={handleSubmitOrder}
-                    disabled={!valid || submitting || !isStoreActive}
-                    className={`btn-shine font-integral text-xs sm:text-base uppercase tracking-wider font-black w-full py-3.5 sm:py-4 text-center rounded-full shadow-lg transition-all flex items-center justify-center gap-2 ${valid && isStoreActive && !submitting
-                      ? "bg-gradient-to-r from-[#FFC700] via-[#ffd736] to-[#FFC700] text-[#00230C] hover:text-[#001507] hover:scale-[1.02] active:scale-[0.98] shadow-amber-500/25 hover:shadow-amber-400/40 hover:cursor-pointer"
-                      : "bg-slate-300 text-slate-500 cursor-not-allowed"
-                      }`}
-                  >
-                    {submitting ? (
-                      <>
-                        <span className="material-symbols-outlined text-[18px] sm:text-[20px] animate-spin">progress_activity</span>
-                        PROCESSING ORDER...
-                      </>
-                    ) : isStoreActive ? (
-                      "PLACE ORDER"
-                    ) : (
-                      "STORE CLOSED"
-                    )}
-                  </button>
-                </div>
+              {/* Desktop submit. On mobile the sticky bar owns this. */}
+              <div className="mt-6 hidden lg:block">
+                <PlaceOrderButton
+                  onClick={handleSubmitOrder}
+                  submitting={submitting}
+                  isStoreOpen={isStoreOpen}
+                  total={totals.total}
+                />
               </div>
             </div>
 
-            {/* Right Column: Dark Summary Sidebar Box matching reference */}
-            <div className="lg:col-span-5 xl:col-span-4 sticky top-24">
-              <div className="bg-[#023020] text-white rounded-3xl p-4 sm:p-8 shadow-2xl border border-zinc-800 space-y-4 sm:space-y-6">
-                <h2 className="font-integral text-lg sm:text-2xl text-white uppercase tracking-wide">
-                  SUMMARY
-                </h2>
-
-                {/* Items snapshot list */}
-                <div className="space-y-2 text-xs sm:text-sm font-medium border-b border-zinc-800 pb-4 sm:pb-5">
-                  {items.map((item) => (
-                    <div key={item.id} className="flex justify-between items-center text-zinc-300">
-                      <span className="truncate max-w-[180px] sm:max-w-[200px]">
-                        {item.name} <span className="text-zinc-500 font-bold">×{item.quantity}</span>
-                      </span>
-                      <span className="font-bold text-white shrink-0">Rs.{item.price * item.quantity}</span>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Coupon Code row */}
-                <div className="pt-1">
-                  <div className="flex items-center bg-zinc-900 border border-zinc-800 rounded-xl p-1.5 focus-within:border-[#FFC700] transition-colors">
-                    <input
-                      type="text"
-                      placeholder="Coupon code"
-                      value={couponCode}
-                      onChange={(e) => setCouponCode(e.target.value)}
-                      disabled={couponApplied}
-                      className="w-full bg-transparent px-3 text-xs text-white placeholder-zinc-500 focus:outline-none uppercase font-bold"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleApplyCoupon}
-                      disabled={couponApplied}
-                      className="px-4 sm:px-5 py-1.5 sm:py-2 rounded-lg bg-[#FFC700] text-slate-950 font-black text-[11px] sm:text-xs uppercase hover:bg-amber-400 transition-colors shrink-0 disabled:opacity-50"
-                    >
-                      {couponApplied ? "Applied" : "Apply"}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Cost Calculations */}
-                <div className="space-y-2.5 sm:space-y-3 text-xs sm:text-sm font-semibold pt-1">
-                  <div className="flex justify-between items-center text-zinc-300">
-                    <span>Subtotal</span>
-                    <span className="font-bold text-white">Rs.{subtotal}</span>
-                  </div>
-
-                  {orderType === "delivery" && (
-                    <div className="flex justify-between items-center text-zinc-300">
-                      <div className="flex items-center gap-2">
-                        <span>Delivery</span>
-                        {deliveryDistance > 0 && (
-                          <span className="px-2 py-0.5 rounded-full bg-zinc-800 text-[10px] text-zinc-400 font-bold">
-                            {deliveryDistance.toFixed(2)} km
-                          </span>
-                        )}
-                      </div>
-                      <span className="font-bold text-white">
-                        {deliveryLocation ? `Rs.${deliveryFee}` : "Rs. 60"}
-                      </span>
-                    </div>
-                  )}
-
-                  {discount > 0 && (
-                    <div className="flex justify-between items-center text-amber-400">
-                      <span>Discount</span>
-                      <span className="font-bold">- Rs.{discount}</span>
-                    </div>
-                  )}
-
-                  {/* Divider line */}
-                  <div className="pt-3 sm:pt-4 border-t border-zinc-800 flex justify-between items-center">
-                    <span className="font-integral text-sm sm:text-lg uppercase text-[#FFC700] font-black">
-                      Total
-                    </span>
-                    <span className="font-black text-xl sm:text-3xl text-[#FFC700]">
-                      Rs.{grandTotal}
-                    </span>
-                  </div>
-                </div>
-              </div>
+            <div className="lg:col-span-5 lg:sticky lg:top-24 xl:col-span-4">
+              <OrderSummary title="Summary" {...summaryProps} lines={items} />
             </div>
           </div>
         )}
       </div>
 
-      {/* Confirmation Modal */}
-      {confirmed && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
-          <div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl p-6 sm:p-8 text-center animate-scale-in border border-slate-200">
-            <div className="w-20 h-20 rounded-full bg-[#FFC700] text-slate-950 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-amber-500/30">
-              <span className="material-symbols-outlined text-[48px]">done</span>
+      {/* Sticky mobile action bar — the live total and the one next action. */}
+      {!isEmpty && (
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 px-4 pt-3 backdrop-blur-md lg:hidden [padding-bottom:calc(0.75rem+env(safe-area-inset-bottom))]">
+          <div className="mx-auto flex max-w-3xl items-center gap-3">
+            <div className="min-w-0">
+              <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
+                {itemCount} {itemCount === 1 ? "item" : "items"}
+                {totals.discount > 0 ? " · discount applied" : ""}
+              </p>
+              <p className="truncate text-lg font-black text-[#00230c]">
+                {formatRupees(totals.total)}
+              </p>
             </div>
 
-            <h2 className="text-2xl font-black text-slate-950 tracking-tight uppercase">
-              ORDER PLACED SUCCESSFULLY!
-            </h2>
-            <p className="mt-1 text-sm text-slate-600 font-medium">
-              Thank you, {confirmed.name}! Your order has been received.
-            </p>
-
-            <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-slate-100 text-xs font-bold border border-slate-200">
-              <span>Order ID:</span>
-              <span className="text-slate-950 font-black text-sm">{confirmed.orderNumber}</span>
-            </div>
-
-            <div className="mt-6 bg-slate-50 p-4 rounded-2xl text-left space-y-2 text-sm font-semibold border border-slate-200">
-              <div className="flex justify-between">
-                <span className="text-slate-500">Items</span>
-                <span>{confirmed.itemCount} items</span>
-              </div>
-              <div className="flex justify-between items-start gap-2">
-                <span className="text-slate-500 shrink-0">Address</span>
-                <span className="text-right text-xs truncate max-w-[200px]">{confirmed.address}</span>
-              </div>
-              <div className="flex justify-between pt-2 border-t border-slate-200 font-extrabold text-base">
-                <span>Total Amount</span>
-                <span className="text-amber-600 font-black">Rs. {confirmed.total}</span>
-              </div>
-            </div>
-
-            <div className="mt-6 flex gap-3">
-              <Link
-                href={`/orders/${confirmed.orderId}`}
-                onClick={() => setConfirmed(null)}
-                className="flex-1 py-3.5 rounded-full bg-[#FFC700] text-slate-950 font-extrabold text-sm uppercase text-center shadow-md hover:bg-amber-400 transition-colors"
-              >
-                Track Order
-              </Link>
+            {activeStep === "cart" ? (
               <button
-                onClick={() => setConfirmed(null)}
-                className="px-6 py-3.5 rounded-full bg-slate-200 font-bold text-sm text-slate-800 hover:bg-slate-300 transition-colors"
+                type="button"
+                onClick={() => setActiveStep("checkout")}
+                className="ml-auto flex shrink-0 items-center gap-1.5 rounded-full bg-[#00230c] px-5 py-3.5 text-xs font-black uppercase tracking-wide text-[#FFC700] shadow-lg transition-transform active:scale-[0.97]"
               >
-                Close
+                Checkout
+                <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
               </button>
-            </div>
+            ) : (
+              <div className="ml-auto min-w-0 shrink">
+                <PlaceOrderButton
+                  onClick={handleSubmitOrder}
+                  submitting={submitting}
+                  isStoreOpen={isStoreOpen}
+                  compact
+                />
+              </div>
+            )}
           </div>
         </div>
       )}
+
+      {confirmed && (
+        <ConfirmationModal confirmed={confirmed} onClose={() => setConfirmed(null)} />
+      )}
     </div>
   );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Pieces                                                                     */
+/* -------------------------------------------------------------------------- */
+
+function CartHeader({
+  activeStep,
+  itemCount,
+  showSteps,
+  onStep,
+}: {
+  activeStep: "cart" | "checkout";
+  itemCount: number;
+  showSteps: boolean;
+  onStep: (step: "cart" | "checkout") => void;
+}) {
+  return (
+    <div className="mb-4 flex flex-col gap-3 border-b border-slate-200 pb-4 sm:mb-6 sm:gap-4 sm:pb-6 md:flex-row md:items-center md:justify-between">
+      <h1 className="font-integral text-2xl uppercase tracking-tight text-slate-950 sm:text-4xl">
+        {activeStep === "cart" ? (
+          <>
+            Your <span className="italic text-green-700">Cart</span>
+          </>
+        ) : (
+          <>
+            Secure <span className="italic text-green-700">Checkout</span>
+          </>
+        )}
+      </h1>
+
+      {showSteps && (
+        <nav
+          aria-label="Checkout progress"
+          className="flex items-center gap-1.5 self-start rounded-2xl border border-slate-200 bg-slate-100 p-1 sm:gap-2 sm:p-1.5 md:self-auto"
+        >
+          <StepButton
+            index={1}
+            label={`Cart (${itemCount})`}
+            active={activeStep === "cart"}
+            onClick={() => onStep("cart")}
+          />
+          <span aria-hidden className="shrink-0 text-xs font-extrabold text-slate-300">
+            →
+          </span>
+          <StepButton
+            index={2}
+            label="Checkout"
+            active={activeStep === "checkout"}
+            onClick={() => onStep("checkout")}
+          />
+        </nav>
+      )}
+    </div>
+  );
+}
+
+function StepButton({
+  index,
+  label,
+  active,
+  onClick,
+}: {
+  index: number;
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-current={active ? "step" : undefined}
+      className={`flex items-center gap-1.5 whitespace-nowrap rounded-xl px-3 py-2 text-[11px] font-bold uppercase transition-all sm:gap-2 sm:px-4 sm:py-2.5 sm:text-xs ${
+        active
+          ? "bg-[#00230c] text-white shadow-md"
+          : "text-slate-600 hover:bg-slate-200/50 hover:text-slate-900"
+      }`}
+    >
+      <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[#FFC700] text-[10px] font-black text-slate-950 sm:h-5 sm:w-5 sm:text-[11px]">
+        {index}
+      </span>
+      {label}
+    </button>
+  );
+}
+
+function PlaceOrderButton({
+  onClick,
+  submitting,
+  isStoreOpen,
+  total,
+  compact = false,
+}: {
+  onClick: () => void;
+  submitting: boolean;
+  isStoreOpen: boolean;
+  total?: number;
+  compact?: boolean;
+}) {
+  const disabled = submitting || !isStoreOpen;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      // Deliberately not disabled on an incomplete form: pressing it explains
+      // what is missing and scrolls there, which a dead grey button cannot.
+      disabled={disabled}
+      aria-busy={submitting}
+      className={`flex w-full items-center justify-center gap-2 rounded-full text-center font-black uppercase tracking-wider shadow-lg transition-all ${
+        compact ? "px-5 py-3.5 text-xs" : "py-4 text-base"
+      } ${
+        disabled
+          ? "cursor-not-allowed bg-slate-300 text-slate-500"
+          : "bg-gradient-to-r from-[#FFC700] via-[#ffd736] to-[#FFC700] text-[#00230C] shadow-amber-500/25 hover:scale-[1.02] hover:shadow-amber-400/40 active:scale-[0.98]"
+      }`}
+    >
+      {submitting ? (
+        <>
+          <span className="material-symbols-outlined animate-spin text-[18px]">
+            progress_activity
+          </span>
+          {compact ? "Placing…" : "Placing your order…"}
+        </>
+      ) : !isStoreOpen ? (
+        "Store Closed"
+      ) : (
+        <>
+          Place Order
+          {total !== undefined && (
+            <span className="font-black">· {formatRupees(total)}</span>
+          )}
+        </>
+      )}
+    </button>
+  );
+}
+
+function EmptyCart() {
+  return (
+    <div className="mx-auto my-12 max-w-xl rounded-3xl border border-slate-200 bg-slate-50 p-10 text-center shadow-sm sm:p-12">
+      <span className="material-symbols-outlined mb-4 text-[72px] text-slate-400">
+        shopping_bag
+      </span>
+      <h2 className="mb-2 text-2xl font-bold text-slate-900">Your cart is empty</h2>
+      <p className="mb-6 text-sm text-slate-600">
+        Nothing added yet — the menu is one tap away.
+      </p>
+      <Link
+        href="/#menu"
+        className="inline-flex items-center justify-center rounded-full bg-[#00230c] px-8 py-3.5 text-sm font-extrabold text-white shadow-md transition-all hover:bg-[#073615]"
+      >
+        Browse Menu
+      </Link>
+    </div>
+  );
+}
+
+/** Matches the real layout's shape so nothing jumps when the cart rehydrates. */
+function CartSkeleton() {
+  return (
+    <div className="min-h-screen animate-pulse bg-white px-4 pt-6 pb-20 md:px-8">
+      <div className="mx-auto max-w-7xl">
+        <div className="mb-6 flex items-center justify-between border-b border-slate-200 pb-6">
+          <div className="h-8 w-48 rounded-lg bg-slate-200 sm:h-10 sm:w-64" />
+          <div className="hidden h-11 w-64 rounded-2xl bg-slate-100 md:block" />
+        </div>
+        <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-12">
+          <div className="space-y-4 lg:col-span-8">
+            <div className="rounded-3xl border border-slate-200/80 bg-white p-4 shadow-sm sm:p-8">
+              <div className="mb-6 h-7 w-40 rounded bg-slate-200" />
+              <div className="space-y-4">
+                {[0, 1, 2].map((i) => (
+                  <div key={i} className="h-24 rounded-2xl bg-slate-100 sm:h-28" />
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="hidden lg:col-span-4 lg:block">
+            <div className="h-80 rounded-3xl bg-slate-200/80" />
+          </div>
+        </div>
+      </div>
+      <span className="sr-only">Loading your cart…</span>
+    </div>
+  );
+}
+
+function ConfirmationModal({
+  confirmed,
+  onClose,
+}: {
+  confirmed: Confirmation;
+  onClose: () => void;
+}) {
+  const closeRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    closeRef.current?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <div
+      className="animate-fade-in fixed inset-0 z-[200] flex items-center justify-center bg-black/80 p-4 backdrop-blur-md"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="order-confirmed-title"
+    >
+      <div className="animate-scale-in relative max-h-[92vh] w-full max-w-md overflow-y-auto rounded-3xl border border-slate-200 bg-white p-6 text-center shadow-2xl sm:p-8">
+        <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-[#FFC700] text-slate-950 shadow-lg shadow-amber-500/30">
+          <span className="material-symbols-outlined text-[48px]">done</span>
+        </div>
+
+        <h2
+          id="order-confirmed-title"
+          className="text-2xl font-black uppercase tracking-tight text-slate-950"
+        >
+          Order placed
+        </h2>
+        <p className="mt-1 text-sm font-medium text-slate-600">
+          Thanks{confirmed.name ? `, ${confirmed.name}` : ""}! We&apos;re on it.
+        </p>
+
+        <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-100 px-4 py-2 text-xs font-bold">
+          <span>Order</span>
+          <span className="text-sm font-black text-slate-950">{confirmed.orderNumber}</span>
+        </div>
+
+        <div className="mt-6 space-y-2 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-left text-sm font-semibold">
+          <div className="flex justify-between">
+            <span className="text-slate-500">Items</span>
+            <span>
+              {confirmed.itemCount} {confirmed.itemCount === 1 ? "item" : "items"}
+            </span>
+          </div>
+          <div className="flex items-start justify-between gap-3">
+            <span className="shrink-0 text-slate-500">Address</span>
+            <span className="max-w-[220px] break-words text-right text-xs">
+              {confirmed.address}
+            </span>
+          </div>
+          <div className="flex justify-between border-t border-slate-200 pt-2 text-base font-extrabold">
+            <span>Total</span>
+            <span className="font-black text-amber-600">{formatRupees(confirmed.total)}</span>
+          </div>
+        </div>
+
+        <div className="mt-6 flex gap-3">
+          {confirmed.orderId && (
+            <Link
+              href={`/orders/${confirmed.orderId}`}
+              onClick={onClose}
+              className="flex-1 rounded-full bg-[#FFC700] py-3.5 text-center text-sm font-extrabold uppercase text-slate-950 shadow-md transition-colors hover:bg-amber-400"
+            >
+              Track Order
+            </Link>
+          )}
+          <button
+            ref={closeRef}
+            type="button"
+            onClick={onClose}
+            className="rounded-full bg-slate-200 px-6 py-3.5 text-sm font-bold text-slate-800 transition-colors hover:bg-slate-300"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Local order history                                                        */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Guests have no row to look their order up by, so /orders and the review
+ * watcher both read this list. Keys must stay as they are — `readLocalOrders`
+ * in src/lib/reviews-local.ts parses the same shape.
+ */
+function saveOrderToStorage(
+  confirmation: Confirmation,
+  phone: string,
+  subtotal: number,
+  deliveryFee: number,
+  items: { id: string; name: string; price: number; quantity: number; image_path: string }[]
+): void {
+  try {
+    const stored = JSON.parse(localStorage.getItem("azlan-orders") || "[]") as {
+      orderNumber?: string;
+      id?: string;
+    }[];
+
+    const entry = {
+      id: confirmation.orderId,
+      orderNumber: confirmation.orderNumber,
+      phone,
+      total: confirmation.total,
+      subtotal,
+      delivery_fee: deliveryFee,
+      customer_name: confirmation.name,
+      customer_address: confirmation.address,
+      status: "pending",
+      timestamp: Date.now(),
+      items: items.map((i) => ({
+        id: i.id,
+        name: i.name,
+        price: i.price,
+        quantity: i.quantity,
+        image_path: i.image_path,
+      })),
+    };
+
+    const filtered = stored.filter(
+      (o) => o.orderNumber !== confirmation.orderNumber && o.id !== confirmation.orderId
+    );
+    filtered.unshift(entry);
+    localStorage.setItem("azlan-orders", JSON.stringify(filtered.slice(0, 10)));
+  } catch {
+    /* Private mode or a full quota — the order is placed either way. */
+  }
 }

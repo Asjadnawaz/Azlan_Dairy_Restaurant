@@ -1,3 +1,4 @@
+import type { Viewport } from "next";
 import { RiderProfileForm } from "@/components/rider/rider-profile-form";
 
 export const metadata = {
@@ -5,10 +6,17 @@ export const metadata = {
   description: "Rider profile settings",
 };
 
+export const viewport: Viewport = {
+  themeColor: "#07110B",
+};
+
 export default function RiderProfilePage() {
   return (
-    <div className="min-h-screen bg-slate-900 p-4 sm:p-8 flex items-center justify-center">
-      <RiderProfileForm />
+    <div className="rider-shell min-h-dvh px-4 py-8 flex items-start justify-center">
+      <div className="w-full max-w-md space-y-4">
+        <h1 className="font-integral text-lg">Meri Profile</h1>
+        <RiderProfileForm />
+      </div>
     </div>
   );
 }

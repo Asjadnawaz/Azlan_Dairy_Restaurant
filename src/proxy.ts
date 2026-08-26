@@ -17,7 +17,8 @@ function safeRedirect(target: string, requestUrl: string) {
  * 3. Enforces strict role-based access control (RBAC):
  *    - Admin accessing /rider -> redirected to /admin/orders
  *    - Rider accessing /admin -> redirected to /rider
- *    - Customer/Unauthenticated accessing /admin or /rider -> redirected to /
+ *    - Customer accessing /admin or /rider -> redirected to /
+ *    - Unauthenticated -> /rider shows its own login screen, everything else to /
  */
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({
@@ -63,8 +64,19 @@ export async function proxy(request: NextRequest) {
     return response;
   }
 
-  // Unauthenticated user attempting to access protected routes -> redirect to homepage
+  // Unauthenticated:
+  //  - /rider renders its own sign-in screen, so let it through. Bouncing it home
+  //    left the rider on the customer homepage with no way in — their bookmark,
+  //    and every session expiry, dead-ended there.
+  //  - Deeper rider pages have no sign-in of their own, so they go to /rider.
+  //  - /admin has no self-service sign-in screen, so it still goes home.
+  //
+  // Nothing is exposed by letting /rider render: the page shows only the login
+  // form until a session exists, and all data comes from /api/rider/orders,
+  // which re-checks the role server-side on every call.
   if (!user) {
+    if (pathname === "/rider") return response;
+    if (isRiderRoute) return safeRedirect("/rider", request.url);
     return safeRedirect("/", request.url);
   }
 

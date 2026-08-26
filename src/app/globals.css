@@ -110,6 +110,42 @@ body {
 }
 
 /* =========================================
+   Controls are not text
+   =========================================
+   A long-press on a phone (or a slightly-dragged click on desktop) selects a
+   button's label and pops the copy/share bubble instead of firing the button.
+   Interactive surfaces opt out of selection; `touch-action: manipulation` also
+   drops the 300ms double-tap-to-zoom wait, so taps feel immediate.
+
+   Deliberately scoped: inputs, textareas, `[contenteditable]` and all body copy
+   stay selectable — a customer must still be able to copy an order number, an
+   address or a price. Icon glyphs are included because selecting one copies its
+   ligature name ("shopping_cart"), never something a person wanted. */
+
+button,
+[role="button"],
+[role="radio"],
+[role="tab"],
+summary,
+label,
+select,
+.btn,
+nav a,
+.material-symbols-outlined {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* A label wrapping a text field must not make that field unselectable. */
+label input,
+label textarea {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* =========================================
    Material Symbols — baseline
    ========================================= */
 
@@ -944,4 +980,138 @@ body {
 
 .btn-shine:hover::after {
   transform: skewX(-22deg) translateX(300%);
+}
+
+/* =========================================
+   Rider Portal — "instrument cluster"
+   A field tool for a rider on a bike, not an admin panel.
+   Palette derives from the brand deep green (--color-primary: #00230c)
+   and mint accent (--color-mint-accent), pushed dark for sunlight glare.
+   ========================================= */
+
+.rider-shell {
+  --r-bg: #07110b;
+  /* brand deep green pushed to near-black */
+  --r-panel: #0e1c13;
+  --r-raised: #14281b;
+  --r-line: #1f3a28;
+  --r-text: #eaf3ed;
+  --r-muted: #8ca396;
+
+  --r-cash: #ffc700;
+  /* money ONLY — never used for anything else */
+  --r-shop: #a3d2a9;
+  /* step 1, at the shop (brand mint) */
+  --r-nav: #3b82f6;
+  /* step 2, on the road (maps blue, a convention riders know) */
+  --r-done: #16a34a;
+  /* step 3, delivered */
+  --r-late: #f97316;
+  --r-alert: #dc2626;
+
+  background-color: var(--r-bg);
+  color: var(--r-text);
+  overscroll-behavior-y: contain;
+}
+
+/* Money and timers must not jitter their digits between refreshes */
+.tnum {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/*
+ * Numerals on the rider screen.
+ *
+ * NOT .font-integral: the bundled Integral CF is a Fontspring DEMO build that
+ * swaps an ornament in for `4`, `#`, `/`, `+`, `-`, `%` and most symbols, so
+ * "Rs 1,450" renders as "Rs 1,*50". Unreadable is bad anywhere; on the cash the
+ * rider has to collect it is the one unacceptable failure. Jakarta at 800 with
+ * tight tracking still reads as a gauge, and every digit exists.
+ */
+.rider-num {
+  font-family: var(--font-jakarta), system-ui, sans-serif;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* Keyboard focus stays visible on the dark shell */
+.rider-shell :focus-visible {
+  outline: 2px solid var(--r-cash);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+/* The sticky action bar clears the iOS home bar */
+.rider-action-bar {
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+}
+
+@keyframes riderStepFill {
+  from {
+    transform: scaleX(0);
+  }
+
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes riderSlabRise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes riderPagerPulse {
+
+  0%,
+  100% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(1.14);
+  }
+}
+
+.rider-step-fill {
+  transform-origin: left center;
+  animation: riderStepFill 0.25s ease-out both;
+}
+
+.rider-slab-rise {
+  animation: riderSlabRise 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.rider-pager-pulse {
+  animation: riderPagerPulse 0.5s ease-in-out 2;
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  /* Site-wide, not rider-only: the customer pages run several *infinite*
+     decorative loops (hero zoom, floating glows, drifting particles, marquee,
+     shimmer) that a reduced-motion visitor has asked not to see. Rather than
+     hunt every class, run every animation exactly once at ~0ms. That stops the
+     loops dead and, crucially, lets `forwards` entrance animations
+     (`.reveal`, `.animate-fade-in`, `.animate-slide-up`) snap straight to their
+     end state instead of being frozen at opacity 0 — which a blunt
+     `animation: none` would do. */
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

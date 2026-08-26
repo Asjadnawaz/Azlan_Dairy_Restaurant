@@ -4,7 +4,10 @@ import { Plus_Jakarta_Sans } from "next/font/google";
 import { ThemeProvider } from "@/components/azlan/theme-provider";
 import { Toaster } from "sonner";
 import { LayoutChrome } from "@/components/azlan/layout-chrome";
-import { createServerClient } from "@/lib/supabase/server";
+import { StoreStatusProvider } from "@/hooks/use-store-status";
+import { ReviewWatcher } from "@/components/azlan/review-watcher";
+import { getSettings, getStoreStatus } from "@/lib/settings.server";
+import { DEFAULT_CLOSE_HOUR, DEFAULT_OPEN_HOUR } from "@/lib/store-hours";
 import "./globals.css";
 
 const plusJakarta = Plus_Jakarta_Sans({
@@ -93,32 +96,52 @@ export const metadata: Metadata = {
   },
 };
 
+/** "19:00" — the 24-hour form schema.org wants for openingHours. */
+function toIsoTime(hour: number): string {
+  return `${String(hour).padStart(2, "0")}:00`;
+}
+
 export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // Fetch store status server-side for kill-switch
-  const supabase = await createServerClient();
-  const { data: settings } = await supabase
-    .from("settings")
-    .select("is_active")
-    .single();
-  const isStoreActive = settings?.is_active ?? true;
+  // Cached and cookie-free (see src/lib/settings.server.ts). The previous
+  // cookie-bound read here made every page in the site dynamic.
+  const [settings, storeStatus] = await Promise.all([getSettings(), getStoreStatus()]);
+
+  const openHour = settings?.open_hour ?? DEFAULT_OPEN_HOUR;
+  const closeHour = settings?.close_hour ?? DEFAULT_CLOSE_HOUR;
+
+  // Seed for the shared client-side store status. The schedule travels with the
+  // status so the browser can re-derive the answer from its own clock without
+  // going back to the server.
+  const storeSeed = {
+    status: storeStatus,
+    schedule: {
+      is_active: settings?.is_active ?? true,
+      open_mode: settings?.open_mode ?? null,
+      force_open_until: settings?.force_open_until ?? null,
+      open_hour: settings?.open_hour ?? null,
+      close_hour: settings?.close_hour ?? null,
+    },
+  };
 
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "FastFoodRestaurant",
-    name: "Azlan Fast Food & BBQ Point",
+    name: settings?.store_name || "Azlan Fast Food & BBQ Point",
     image: `${siteUrl}/images/hero-burger.jpg`,
     logo: `${siteUrl}/images/logo.png`,
     url: siteUrl,
-    telephone: "+92 300 0000000",
+    // Real values from `settings` — this used to publish a placeholder number,
+    // the wrong street and 12:00–02:00 opening hours.
+    telephone: settings?.phone || "+92 302 9359694",
     priceRange: "$$",
     servesCuisine: ["Fast Food", "BBQ", "Burgers", "Pizza", "Pakistani"],
     address: {
       "@type": "PostalAddress",
-      streetAddress: "Main Malir Halt",
+      streetAddress: settings?.address || "Main Khokhrapar no. 2.5",
       addressLocality: "Malir",
       addressRegion: "Karachi",
       postalCode: "75080",
@@ -141,8 +164,8 @@ export default async function RootLayout({
           "Saturday",
           "Sunday",
         ],
-        opens: "12:00",
-        closes: "02:00",
+        opens: toIsoTime(openHour),
+        closes: toIsoTime(closeHour),
       },
     ],
     hasMenu: `${siteUrl}/#menu`,
@@ -155,6 +178,16 @@ export default async function RootLayout({
       suppressHydrationWarning
     >
       <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
+        {/*
+          Material Symbols is an icon font: until it arrives every icon renders
+          as its ligature text ("search", "call"), so loading it non-blocking
+          would look worse than the extra round trip. next/font cannot host it —
+          Google Fonts does not publish it through the API next/font uses — so
+          the stylesheet link stays, with a preconnect to start the fetch sooner.
+        */}
+        {/* eslint-disable-next-line @next/next/no-page-custom-font */}
         <link
           rel="stylesheet"
           href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap"
@@ -170,8 +203,11 @@ export default async function RootLayout({
           defaultTheme="light"
           enableSystem={false}
         >
-          <LayoutChrome isStoreActive={isStoreActive} />
-          <main className="flex-1">{children}</main>
+          <StoreStatusProvider seed={storeSeed}>
+            <LayoutChrome deliveryFee={settings?.delivery_fee ?? 0} />
+            <main className="flex-1">{children}</main>
+            <ReviewWatcher />
+          </StoreStatusProvider>
           <Toaster
             position="bottom-right"
             closeButton

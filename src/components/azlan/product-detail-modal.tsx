@@ -3,10 +3,20 @@
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import Image from "next/image";
-import { createBrowserClient } from "@/lib/supabase/client";
 import { useCart } from "@/lib/cart-store";
+import { useMounted } from "@/hooks/use-mounted";
 import { toast } from "sonner";
-import type { Item, Review } from "@/lib/supabase/database.types";
+import type { Item } from "@/lib/supabase/database.types";
+
+/** Shape returned by GET /api/reviews — names already shortened, phone dropped. */
+type PublicItemReview = {
+  id: string;
+  name: string;
+  rating: number;
+  comment: string | null;
+  created_at: string;
+  is_verified: boolean;
+};
 
 interface ProductDetailModalProps {
   item: Item | null;
@@ -20,16 +30,24 @@ export function ProductDetailModal({
   isStoreActive = true,
 }: ProductDetailModalProps) {
   const [qty, setQty] = useState(1);
-  const [reviews, setReviews] = useState<Review[]>([]);
+  const [reviews, setReviews] = useState<PublicItemReview[]>([]);
   const [loadingReviews, setLoadingReviews] = useState(false);
   const [imgError, setImgError] = useState(false);
-  const [mounted, setMounted] = useState(false);
   const add = useCart((s) => s.add);
+  const mounted = useMounted();
 
-  // Mount check for React Portal
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  // Reset the per-item UI state during render when the item changes, not in an
+  // effect: React 19 flags a synchronous setState in an effect body as a
+  // cascading render (error). Tracking the previous id and resetting inline is
+  // React's documented "adjust state when a prop changes" pattern.
+  const [prevItemId, setPrevItemId] = useState<string | null>(item?.id ?? null);
+  if ((item?.id ?? null) !== prevItemId) {
+    setPrevItemId(item?.id ?? null);
+    setQty(1);
+    setImgError(false);
+    setReviews([]);
+    setLoadingReviews(item != null);
+  }
 
   // Lock body scroll and handle Escape key press
   useEffect(() => {
@@ -52,35 +70,46 @@ export function ProductDetailModal({
     };
   }, [item, onClose]);
 
-  // Reset state and fetch reviews whenever item changes
+  // Fetch reviews whenever the item changes. The visible-loading flag is set by
+  // the render-time reset above; here we only kick off the request and clear the
+  // flag after it resolves (both async, so not flagged as a cascading render).
   useEffect(() => {
     if (!item) return;
-    setQty(1);
-    setImgError(false);
-    setLoadingReviews(true);
     const itemId = item.id;
+    const controller = new AbortController();
 
     async function fetchReviews() {
       try {
-        const supabase = createBrowserClient();
-        const { data } = await supabase
-          .from("reviews")
-          .select("*")
-          .eq("item_id", itemId)
-          .order("created_at", { ascending: false });
-
-        if (data) setReviews(data as Review[]);
-      } catch {
-        // silent fallback
+        // Through the API rather than a browser `select`: the route shortens
+        // customer names ("Ahmed K."), which is the same treatment the homepage
+        // gives them. The raw table holds the full name and the phone.
+        const res = await fetch(`/api/reviews?item_id=${encodeURIComponent(itemId)}`, {
+          signal: controller.signal,
+        });
+        if (!res.ok) throw new Error(`Reviews request failed: ${res.status}`);
+        const payload = (await res.json()) as { reviews?: PublicItemReview[] };
+        setReviews(payload.reviews ?? []);
+      } catch (err) {
+        // An aborted request is the effect cleaning up, not a failure.
+        if ((err as Error).name !== "AbortError") {
+          setReviews([]);
+        }
       } finally {
-        setLoadingReviews(false);
+        if (!controller.signal.aborted) setLoadingReviews(false);
       }
     }
 
     void fetchReviews();
+    return () => controller.abort();
   }, [item]);
 
   if (!item || !mounted) return null;
+
+  // The DB trigger keeps `rating`/`review_count` honest, so an unrated item has
+  // review_count 0 (and often rating 0). Never fake a 5.0 for it.
+  const reviewCount = item.review_count || 0;
+  const ratingValue = Number(item.rating) || 0;
+  const hasRating = reviewCount > 0 && ratingValue > 0;
 
   const handleAddToCart = () => {
     if (!isStoreActive) {
@@ -98,7 +127,6 @@ export function ProductDetailModal({
       qty
     );
 
-    toast.success(`${qty}× ${item.name} added to cart!`);
     onClose();
   };
 
@@ -163,15 +191,22 @@ export function ProductDetailModal({
                   {item.name}
                 </h2>
                 <div className="flex items-center gap-2.5 mt-1.5 flex-wrap">
-                  <span className="inline-flex items-center gap-1 font-extrabold text-amber-400 text-xs sm:text-sm bg-black/40 px-2.5 py-0.5 rounded-full backdrop-blur-xs">
-                    <span
-                      className="material-symbols-outlined text-[15px] filled text-amber-400"
-                      style={{ fontVariationSettings: "'FILL' 1" }}
-                    >
-                      star
+                  {hasRating ? (
+                    <span className="inline-flex items-center gap-1 font-extrabold text-amber-400 text-xs sm:text-sm bg-black/40 px-2.5 py-0.5 rounded-full backdrop-blur-xs">
+                      <span
+                        className="material-symbols-outlined text-[15px] filled text-amber-400"
+                        style={{ fontVariationSettings: "'FILL' 1" }}
+                      >
+                        star
+                      </span>
+                      {ratingValue.toFixed(1)} ({reviewCount} {reviewCount === 1 ? "review" : "reviews"})
                     </span>
-                    {Number(item.rating || 5).toFixed(1)} ({item.review_count || 0} reviews)
-                  </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-xs text-slate-200 font-semibold bg-black/40 px-2.5 py-0.5 rounded-full backdrop-blur-xs">
+                      <span className="material-symbols-outlined text-[14px]">star</span>
+                      No reviews yet
+                    </span>
+                  )}
 
                   <span className="inline-flex items-center gap-1 text-xs text-slate-200 font-semibold bg-black/40 px-2.5 py-0.5 rounded-full backdrop-blur-xs">
                     <span className="material-symbols-outlined text-[14px]">schedule</span>
@@ -271,7 +306,7 @@ export function ProductDetailModal({
               ) : reviews.length > 0 ? (
                 <div className="space-y-2 max-h-48 overflow-y-auto slim-scrollbar pr-1">
                   {reviews.map((rev) => {
-                    const stars = Math.min(5, Math.max(1, Math.round(rev.rating || 5)));
+                    const stars = Math.min(5, Math.max(0, Math.round(rev.rating || 0)));
                     return (
                       <div
                         key={rev.id}
@@ -279,7 +314,7 @@ export function ProductDetailModal({
                       >
                         <div className="flex justify-between items-center font-bold text-slate-800">
                           <span className="flex items-center gap-1.5">
-                            {rev.customer_name}
+                            {rev.name}
                             {rev.is_verified && (
                               <span className="text-[10px] text-emerald-700 font-extrabold bg-emerald-100 px-1.5 py-0.2 rounded">
                                 Verified
@@ -287,19 +322,23 @@ export function ProductDetailModal({
                             )}
                           </span>
 
-                          <div className="flex text-amber-400">
-                            {Array.from({ length: stars }).map((_, i) => (
+                          <div className="flex">
+                            {Array.from({ length: 5 }).map((_, i) => (
                               <span
                                 key={i}
-                                className="material-symbols-outlined text-[13px] filled text-amber-400"
-                                style={{ fontVariationSettings: "'FILL' 1" }}
+                                className={`material-symbols-outlined text-[13px] ${
+                                  i < stars ? "text-amber-400" : "text-slate-300"
+                                }`}
+                                style={{ fontVariationSettings: i < stars ? "'FILL' 1" : "'FILL' 0" }}
                               >
                                 star
                               </span>
                             ))}
                           </div>
                         </div>
-                        <p className="text-slate-600 font-medium leading-relaxed">{rev.comment}</p>
+                        {rev.comment && (
+                          <p className="text-slate-600 font-medium leading-relaxed">{rev.comment}</p>
+                        )}
                         {rev.created_at && (
                           <p className="text-[10px] text-slate-400 font-medium">
                             {new Date(rev.created_at).toLocaleDateString("en-US", {

@@ -3,12 +3,13 @@ import Link from "next/link";
 import type { Settings } from "@/lib/supabase/database.types";
 
 const CATEGORIES = [
-  "Signature",
+  "Deals",
+  "Burger",
+  "Sandwich",
   "Broast",
-  "Burgers",
-  "Rolls & Wraps",
-  "BBQ",
-  "Sides",
+  "Roll",
+  "Fries",
+  "Paratha",
 ];
 
 const SOCIAL_LINKS = [

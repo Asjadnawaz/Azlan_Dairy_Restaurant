@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { Resend } from "resend";
-import { generateOrderConfirmationEmail } from "@/lib/email/order-confirmation";
+import { generateOrderConfirmationEmail, sendEmail } from "@/lib/email";
 import { sanitizeText, sanitizePhone, isValidPakistanPhone } from "@/lib/sanitize";
-import { getStoreOpenStatus } from "@/lib/store-hours";
+import { getStoreOpenStatus, formatCountdown } from "@/lib/store-hours";
+import { computeTotals } from "@/lib/cart-pricing";
 
 interface OrderLineItem {
   id: string;
@@ -26,7 +26,47 @@ interface CreateOrderBody {
   delivery_distance_km?: number;
   delivery_coordinates?: { lat: number; lng: number };
   total: number;
+  coupon_code?: string;
   user_id?: string;
+}
+
+const uuidRegex =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const FIRST_ORDER_NUMBER = 1001;
+
+/**
+ * The next `AD-1234`.
+ *
+ * There is no sequence behind this, so it is derived from the numbers already
+ * issued — which means two simultaneous checkouts can read the same one. The
+ * `attempt` offset lets the caller walk past a collision instead of failing the
+ * order; the unique constraint on `order_number` is what makes that safe.
+ *
+ * The maximum is taken numerically over the most recent rows rather than from
+ * `order by placed_at desc limit 1`, which handed out a duplicate whenever a
+ * row was backdated or inserted by hand. Sorting by `order_number` itself would
+ * be no better — as text, `AD-9999` sorts above `AD-10000`.
+ */
+async function nextOrderNumber(
+  admin: ReturnType<typeof createAdminClient>,
+  attempt: number
+): Promise<string> {
+  const { data } = await admin
+    .from("orders")
+    .select("order_number")
+    .like("order_number", "AD-%")
+    .order("created_at", { ascending: false })
+    .limit(100);
+
+  let highest = FIRST_ORDER_NUMBER - 1;
+  for (const row of (data ?? []) as { order_number: string }[]) {
+    const match = row.order_number?.match(/^AD-(\d+)$/);
+    if (match) {
+      highest = Math.max(highest, parseInt(match[1], 10));
+    }
+  }
+  return `AD-${highest + 1 + attempt}`;
 }
 
 export async function GET(req: NextRequest) {
@@ -47,6 +87,7 @@ export async function GET(req: NextRequest) {
       *,
       order_items (
         id,
+        item_id,
         name_snapshot,
         price_snapshot,
         quantity,
@@ -54,19 +95,27 @@ export async function GET(req: NextRequest) {
       )
     `);
 
-    if (user?.id) {
+    // Order numbers are `AD-1234`; anything else is not one, and letting it
+    // through would splice arbitrary text into the PostgREST filter below.
+    const numbers = (numbersParam ?? "")
+      .split(",")
+      .map((n) => n.trim())
+      .filter((n) => /^[A-Za-z0-9-]{1,20}$/.test(n))
+      .slice(0, 10);
+
+    if (user?.id && numbers.length > 0) {
+      // A signed-in customer usually has guest orders on this device too — from
+      // before they made an account, or from a checkout they did not sign in
+      // for. Testing `user_id` first meant /orders never showed those, and the
+      // page silently fell back to its localStorage copy.
+      const inList = numbers.map((n) => `"${n}"`).join(",");
+      query = query.or(`user_id.eq.${user.id},order_number.in.(${inList})`);
+    } else if (user?.id) {
       query = query.eq("user_id", user.id);
-    } else if (numbersParam) {
-      const numbers = numbersParam
-        .split(",")
-        .map((n) => n.trim())
-        .filter(Boolean);
-      if (numbers.length === 0) {
-        return NextResponse.json({ orders: [] });
-      }
+    } else if (numbers.length > 0) {
       query = query.in("order_number", numbers);
     } else if (phoneParam) {
-      query = query.eq("customer_phone", phoneParam.trim());
+      query = query.eq("customer_phone", sanitizePhone(phoneParam));
     } else {
       return NextResponse.json({ orders: [] });
     }
@@ -131,49 +180,98 @@ export async function POST(req: NextRequest) {
     // Use admin client (bypasses RLS) for all database operations
     const admin = createAdminClient();
 
-    // Verify store is active & within operating hours (7:00 PM - 4:00 AM PKT)
+    // Verify the store is open — schedule, or whatever the admin has forced.
     const { data: settings } = await admin
       .from("settings")
-      .select("is_active")
+      .select("*")
       .eq("id", 1)
-      .single();
+      .maybeSingle();
 
-    const storeStatus = getStoreOpenStatus(settings?.is_active ?? true);
+    const storeStatus = getStoreOpenStatus(settings ?? null);
     if (!storeStatus.isOpen) {
       const errorMsg =
         storeStatus.reason === "closed_by_admin"
-          ? "Restaurant is currently paused for online orders. Please check back later."
-          : "Restaurant is currently closed. Operating hours are 7:00 PM to 4:00 AM.";
+          ? "We have paused online orders for now. Please check back shortly."
+          : `We are closed right now — we open in ${formatCountdown(
+              storeStatus.minutesUntilOpen
+            )}. Delivery hours are ${storeStatus.operatingHoursText}.`;
       return NextResponse.json({ error: errorMsg }, { status: 403 });
     }
 
-    // Generate order number: AD-XXXX
-    const { data: lastOrder } = await admin
-      .from("orders")
-      .select("order_number")
-      .order("placed_at", { ascending: false })
-      .limit(1)
-      .single();
+    // Re-derive the money from the line items. The browser sends `subtotal`,
+    // `total` and a coupon code, but a request is just text — trusting the
+    // posted total meant anyone could pay Rs. 1 for a family bucket.
+    const totals = computeTotals({
+      items: body.items.map((item) => ({
+        id: item.id,
+        name: item.name,
+        price: item.price,
+        quantity: item.quantity,
+      })),
+      deliveryFee: body.delivery_fee,
+      couponCode: body.coupon_code ?? null,
+      isPickup: /\[PICKUP\]/i.test(body.customer_note ?? ""),
+    });
 
-    let nextNum = 1001;
-    if (lastOrder?.order_number) {
-      const match = lastOrder.order_number.match(/AD-(\d+)/);
-      if (match) {
-        nextNum = parseInt(match[1], 10) + 1;
+    // The prices themselves still come from the request, so confirm them
+    // against the menu before charging anyone.
+    const menuIds = body.items
+      .map((item) => item.id)
+      .filter((id) => uuidRegex.test(id));
+
+    const validMenuIds = new Set<string>();
+
+    if (menuIds.length > 0) {
+      const { data: menuRows } = await admin
+        .from("items")
+        .select("id, price")
+        .in("id", menuIds);
+
+      const livePrices = new Map(
+        ((menuRows ?? []) as { id: string; price: number }[]).map((row) => [
+          row.id,
+          row.price,
+        ])
+      );
+
+      for (const row of menuRows ?? []) {
+        validMenuIds.add(row.id);
+      }
+
+      const mismatched = body.items.find(
+        (item) =>
+          livePrices.has(item.id) &&
+          Math.round(livePrices.get(item.id)!) !== Math.round(item.price)
+      );
+
+      if (mismatched) {
+        return NextResponse.json(
+          {
+            error:
+              "Some prices changed while you were ordering. Please refresh your basket and try again.",
+          },
+          { status: 409 }
+        );
       }
     }
-    const orderNumber = `AD-${nextNum}`;
 
-    // Insert order
+    // Preserve customer email in order note if provided
+    const customerEmail = body.customer_email || user?.email;
+    let finalNote = note;
+    if (customerEmail && !note?.includes("[Email:")) {
+      finalNote = `${note ? note + " " : ""}[Email: ${customerEmail}]`;
+    }
+
+    // Insert order, retrying the number on a collision (see nextOrderNumber).
     const orderInsert: Record<string, unknown> = {
-      order_number: orderNumber,
       customer_name: name,
       customer_phone: phone,
       customer_address: address,
-      customer_note: body.customer_note?.trim() || null,
-      subtotal: body.subtotal,
-      total: body.total,
-      delivery_fee: body.delivery_fee,
+      customer_note: finalNote || null,
+      subtotal: totals.subtotal,
+      discount: totals.discount,
+      total: totals.total,
+      delivery_fee: totals.deliveryFee,
       delivery_distance_km: body.delivery_distance_km ?? null,
       delivery_coordinates: body.delivery_coordinates ?? null,
       status: "pending",
@@ -185,13 +283,28 @@ export async function POST(req: NextRequest) {
       orderInsert.user_id = user.id;
     }
 
-    const { data: order, error: orderError } = await admin
-      .from("orders")
-      .insert(orderInsert)
-      .select("id, order_number")
-      .single();
+    let order: { id: string; order_number: string } | null = null;
+    let orderError: { message: string; code?: string } | null = null;
 
-    if (orderError || !order) {
+    for (let attempt = 0; attempt < 5 && !order; attempt++) {
+      const orderNumber = await nextOrderNumber(admin, attempt);
+      const { data, error } = await admin
+        .from("orders")
+        .insert({ ...orderInsert, order_number: orderNumber })
+        .select("id, order_number")
+        .single();
+
+      if (!error) {
+        order = data as { id: string; order_number: string };
+        break;
+      }
+      orderError = error;
+      // 23505 = unique violation on order_number: two checkouts read the same
+      // last number. Anything else is not going to fix itself by retrying.
+      if (error.code !== "23505") break;
+    }
+
+    if (!order) {
       console.error("Failed to insert order:", orderError);
       return NextResponse.json(
         { error: "Failed to place order. Please try again.", detail: orderError?.message },
@@ -200,10 +313,10 @@ export async function POST(req: NextRequest) {
     }
 
     // Insert order line items
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    // Only pass item_id if it's a valid ID from the items table; otherwise null prevents FK violations
     const lineItems = body.items.map((item) => ({
-      order_id: order.id,
-      item_id: uuidRegex.test(item.id) ? item.id : null,
+      order_id: order!.id,
+      item_id: validMenuIds.has(item.id) ? item.id : null,
       name_snapshot: item.name,
       price_snapshot: item.price,
       quantity: item.quantity,
@@ -216,38 +329,44 @@ export async function POST(req: NextRequest) {
 
     if (itemsError) {
       console.error("Failed to insert order items:", itemsError);
+      // Clean up orphaned order row to avoid empty orders in admin dashboard
+      await admin.from("orders").delete().eq("id", order.id);
+      return NextResponse.json(
+        { error: "Failed to record order items. Please try again.", detail: itemsError.message },
+        { status: 500 }
+      );
     }
 
-    // --- Send Order Confirmation Email ---
-    // Fire-and-forget: we don't block the response on email delivery.
-    const customerEmail = body.customer_email || user?.email;
-    if (customerEmail && order.id && order.order_number && process.env.RESEND_API_KEY) {
-      const resend = new Resend(process.env.RESEND_API_KEY);
-      const emailHtml = generateOrderConfirmationEmail({
-        customerName: name,
-        orderNumber: order.order_number,
-        orderId: order.id,
-        items: body.items,
-        subtotal: body.subtotal,
-        deliveryFee: body.delivery_fee,
-        total: body.total,
-        deliveryAddress: address,
-        customerPhone: phone,
-        orderNote: body.customer_note,
-      });
+    // --- Send Order Confirmation Email (fire-and-forget) ---
+    // Don't await — the customer should get their response immediately.
+    // Email errors are logged but never block the order.
+    if (customerEmail && order.id && order.order_number) {
+      const emailOrderNumber = order.order_number;
+      const emailOrderId = order.id;
+      void (async () => {
+        try {
+          const emailHtml = generateOrderConfirmationEmail({
+            customerName: name,
+            orderNumber: emailOrderNumber,
+            orderId: emailOrderId,
+            items: body.items,
+            subtotal: totals.subtotal,
+            deliveryFee: totals.deliveryFee,
+            total: totals.total,
+            deliveryAddress: address,
+            customerPhone: phone,
+            orderNote: note,
+          });
 
-      resend.emails
-        .send({
-          from: "Azlan Fast Food <onboarding@resend.dev>",
-          to: customerEmail,
-          subject: `✅ Order Confirmed: ${order.order_number} – Azlan Fast Food`,
-          html: emailHtml,
-        })
-        .then(({ error }) => {
-          if (error) console.error("Resend email error:", error);
-          else console.log(`📧 Confirmation email sent to ${customerEmail} for order ${order.order_number}`);
-        })
-        .catch((err: unknown) => console.error("Email send exception:", err));
+          await sendEmail({
+            to: customerEmail,
+            subject: `Order Confirmed: ${emailOrderNumber} – Azlan Fast Food`,
+            html: emailHtml,
+          });
+        } catch (emailErr) {
+          console.error("Order confirmation email exception:", emailErr);
+        }
+      })();
     }
     // ----------------------------------------
 
@@ -255,6 +374,11 @@ export async function POST(req: NextRequest) {
       success: true,
       order_id: order.id,
       order_number: order.order_number,
+      subtotal: totals.subtotal,
+      discount: totals.discount,
+      delivery_fee: totals.deliveryFee,
+      total: totals.total,
+      coupon: totals.coupon?.code ?? null,
     });
   } catch (err) {
     console.error("Create order exception:", err);

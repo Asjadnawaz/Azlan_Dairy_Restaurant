@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { useCart } from "@/lib/cart-store";
-import { createBrowserClient } from "@/lib/supabase/client";
 import type { Order, OrderItem as DatabaseOrderItem } from "@/lib/supabase/database.types";
 import { toast } from "sonner";
 
@@ -31,11 +31,26 @@ interface StoredOrder {
 }
 
 type DatabaseOrderWithItems = Order & {
-  order_items: Pick<DatabaseOrderItem, "id" | "name_snapshot" | "price_snapshot" | "quantity">[] | null;
+  order_items:
+    | Pick<
+        DatabaseOrderItem,
+        "id" | "item_id" | "name_snapshot" | "price_snapshot" | "quantity"
+      >[]
+    | null;
 };
+
+/** Item names come from the database and go into a printed HTML document. */
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
 
 export default function OrdersPage() {
   const cart = useCart();
+  const router = useRouter();
   const [orders, setOrders] = useState<StoredOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedInvoice, setSelectedInvoice] = useState<StoredOrder | null>(null);
@@ -69,7 +84,7 @@ export default function OrdersPage() {
           if (dbOrders && dbOrders.length > 0) {
             const merged: StoredOrder[] = dbOrders.map((o) => {
               const items: OrderItem[] = (o.order_items || []).map((item) => ({
-                id: item.id,
+                id: item.item_id || item.id,
                 name: item.name_snapshot,
                 price: item.price_snapshot,
                 quantity: item.quantity,
@@ -140,7 +155,7 @@ export default function OrdersPage() {
     });
 
     toast.success(`Items from Order #${order.orderNumber} added to cart!`);
-    cart.open();
+    router.push("/cart");
   };
 
   const isCompleted = (status?: string) => {
@@ -149,11 +164,25 @@ export default function OrdersPage() {
     return s === "completed" || s === "complete" || s === "delivered";
   };
 
+  /**
+   * Link into the tracker. The tracking page gates order-number lookups behind
+   * the last four digits of the phone (an order number is guessable); if we have
+   * the uuid we use that instead, which needs no gate, and otherwise pre-fill the
+   * check from the phone we stored at checkout so the customer isn't asked twice.
+   */
+  const trackHref = (order: StoredOrder) => {
+    if (order.id) return `/orders/${order.id}`;
+    const last4 = (order.phone || "").replace(/\D/g, "").slice(-4);
+    return last4
+      ? `/orders/${order.orderNumber}?p=${last4}`
+      : `/orders/${order.orderNumber}`;
+  };
+
   const getStatusBadge = (status?: string) => {
     const s = (status || "pending").toLowerCase();
     if (s === "completed" || s === "complete" || s === "delivered") {
       return (
-        <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-extrabold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+        <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200">
           <span className="material-symbols-outlined text-[14px]">check_circle</span>
           Complete
         </span>
@@ -161,14 +190,14 @@ export default function OrdersPage() {
     }
     if (s === "cancelled") {
       return (
-        <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-extrabold bg-rose-500/20 text-rose-300 border border-rose-500/30">
+        <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-extrabold bg-rose-100 text-rose-800 border border-rose-200">
           <span className="material-symbols-outlined text-[14px]">cancel</span>
           Cancelled
         </span>
       );
     }
     return (
-      <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-extrabold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+      <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-extrabold bg-amber-100 text-amber-800 border border-amber-200">
         <span className="material-symbols-outlined text-[14px]">timelapse</span>
         In Progress
       </span>
@@ -176,6 +205,80 @@ export default function OrdersPage() {
   };
 
   const displayOrders = orders.slice(0, 10);
+
+  /**
+   * Print one invoice.
+   *
+   * `window.print()` cannot be used here: the site's global `@media print` block
+   * (globals.css) hides every top-level node except `#thermal-receipt-print-portal`
+   * so the 80mm thermal receipt prints cleanly — which means printing this modal
+   * directly yields a blank page. Instead we render the invoice into a hidden
+   * iframe that carries its own stylesheet and print only that document.
+   */
+  const printInvoice = (order: StoredOrder) => {
+    const rows = (order.items || [])
+      .map(
+        (item) =>
+          `<tr><td>${escapeHtml(item.name)}</td><td class="c">${item.quantity}</td><td class="r">Rs. ${item.price}</td><td class="r">Rs. ${item.price * item.quantity}</td></tr>`
+      )
+      .join("");
+
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Invoice ${escapeHtml(order.orderNumber)}</title>
+      <style>
+        *{box-sizing:border-box;font-family:Arial,Helvetica,sans-serif}
+        body{margin:0;padding:28px;color:#111}
+        h1{margin:0;font-size:20px;color:#0a3318}
+        .muted{color:#666;font-size:12px}
+        .meta{display:flex;justify-content:space-between;gap:16px;margin:18px 0;font-size:13px}
+        table{width:100%;border-collapse:collapse;margin-top:8px;font-size:13px}
+        th,td{padding:8px 6px;border-bottom:1px solid #e5e5e5;text-align:left}
+        th{background:#f5f5f5;text-transform:uppercase;font-size:11px}
+        .c{text-align:center}.r{text-align:right}
+        .totals{margin-top:14px;font-size:13px}
+        .totals div{display:flex;justify-content:space-between;padding:3px 0}
+        .grand{font-weight:800;font-size:16px;color:#0a3318;border-top:2px solid #0a3318;padding-top:8px;margin-top:6px}
+      </style></head><body>
+      <h1>AZLAN FAST FOOD &amp; BBQ POINT</h1>
+      <p class="muted">Official Invoice</p>
+      <div class="meta">
+        <div><div class="muted">Order</div><b>#${escapeHtml(order.orderNumber)}</b></div>
+        <div><div class="muted">Date</div>${new Date(order.timestamp).toLocaleString("en-PK", { dateStyle: "medium", timeStyle: "short" })}</div>
+        <div><div class="muted">Status</div>PAID / COMPLETE</div>
+      </div>
+      ${order.customer_name ? `<p class="muted">Customer: <b style="color:#111">${escapeHtml(order.customer_name)}</b>${order.phone ? ` · ${escapeHtml(order.phone)}` : ""}</p>` : ""}
+      <table><thead><tr><th>Item</th><th class="c">Qty</th><th class="r">Price</th><th class="r">Total</th></tr></thead><tbody>${rows}</tbody></table>
+      <div class="totals">
+        ${order.subtotal !== undefined ? `<div><span>Subtotal</span><span>Rs. ${order.subtotal}</span></div>` : ""}
+        ${order.delivery_fee ? `<div><span>Delivery</span><span>Rs. ${order.delivery_fee}</span></div>` : ""}
+        <div class="grand"><span>Total Paid</span><span>Rs. ${order.total}</span></div>
+      </div>
+      </body></html>`;
+
+    const frame = document.createElement("iframe");
+    frame.style.position = "fixed";
+    frame.style.right = "0";
+    frame.style.bottom = "0";
+    frame.style.width = "0";
+    frame.style.height = "0";
+    frame.style.border = "0";
+    document.body.appendChild(frame);
+
+    const doc = frame.contentWindow?.document;
+    if (!doc) {
+      document.body.removeChild(frame);
+      return;
+    }
+    doc.open();
+    doc.write(html);
+    doc.close();
+
+    frame.contentWindow?.focus();
+    frame.contentWindow?.print();
+    // Give the print dialog time to grab the document before we drop the frame.
+    window.setTimeout(() => {
+      if (frame.parentNode) frame.parentNode.removeChild(frame);
+    }, 1000);
+  };
 
   return (
     <div className="min-h-screen bg-[var(--color-background)]">
@@ -327,7 +430,7 @@ export default function OrdersPage() {
                       </>
                     ) : (
                       <Link
-                        href={`/orders/${order.orderNumber}`}
+                        href={trackHref(order)}
                         className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-[var(--color-primary)] text-white text-sm font-bold hover:bg-[var(--color-primary-container)] transition-colors custom-shadow"
                       >
                         <span className="material-symbols-outlined text-[18px]">map</span>
@@ -379,7 +482,7 @@ export default function OrdersPage() {
                 </div>
                 <div>
                   <p className="text-xs text-[var(--color-on-surface-variant)] uppercase font-semibold">Status</p>
-                  <span className="inline-block mt-0.5 px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                  <span className="inline-block mt-0.5 px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200">
                     PAID / COMPLETE
                   </span>
                 </div>
@@ -445,7 +548,7 @@ export default function OrdersPage() {
             {/* Footer Buttons */}
             <div className="p-4 bg-[var(--color-surface-container-low)] border-t border-[var(--color-surface-variant)] flex items-center justify-end gap-3">
               <button
-                onClick={() => window.print()}
+                onClick={() => printInvoice(selectedInvoice)}
                 className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-[var(--color-primary)] text-white text-xs font-bold hover:bg-[var(--color-primary-container)] transition-colors custom-shadow"
               >
                 <span className="material-symbols-outlined text-[16px]">print</span>

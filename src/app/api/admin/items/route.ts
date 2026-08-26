@@ -3,6 +3,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdminUser } from "@/lib/admin";
 import { MENU_ITEMS } from "@/data/menu-data";
+import { revalidateMenu } from "@/lib/menu.server";
 import { getErrorMessage } from "@/lib/utils";
 
 async function verifyAdminAuth() {
@@ -52,6 +53,7 @@ export async function GET() {
         console.error("Failed seeding items:", seedError);
         return NextResponse.json({ error: seedError.message }, { status: 500 });
       }
+      revalidateMenu();
       return NextResponse.json({ items: seeded });
     }
 
@@ -111,6 +113,10 @@ export async function PATCH(req: Request) {
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
+
+    // The homepage serves this table from a cached read; drop it so the new
+    // price is live on the next request rather than up to 5 minutes later.
+    revalidateMenu();
 
     return NextResponse.json({ success: true, item: updatedItem });
   } catch (error: unknown) {

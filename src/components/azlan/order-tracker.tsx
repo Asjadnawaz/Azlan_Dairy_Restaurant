@@ -1,11 +1,56 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import Link from "next/link";
 import { createBrowserClient } from "@/lib/supabase/client";
-import type { Order, OrderItem, Settings } from "@/lib/supabase/database.types";
-import { RealtimeChannel } from "@supabase/supabase-js";
-import { OrderReviewSection } from "./order-review-section";
+import type { Order, OrderItem, OrderStatus, Settings } from "@/lib/supabase/database.types";
+import {
+  clockTime,
+  getMapsUrl,
+  isDoneStatus,
+  parseOrderNote,
+  isPickupOrder,
+  splitAddress,
+  timeAgo,
+} from "@/lib/orders";
+import { formatRupees } from "@/lib/cart-pricing";
+import {
+  isOrderHandled,
+  markOrderHandled,
+  snoozeOrder,
+  subscribeReviewed,
+} from "@/lib/reviews-local";
+import dynamic from "next/dynamic";
+import type { ReviewableItem } from "./review-prompt-modal";
+
+const ReviewPromptModal = dynamic(
+  () => import("./review-prompt-modal").then((m) => m.ReviewPromptModal),
+  { ssr: false }
+);
+
+/**
+ * Order tracking.
+ *
+ * What changed and why:
+ *
+ * - **It fits a phone.** The progress rail was five `w-12 h-12` circles joined
+ *   by `w-16` connectors inside an `overflow-x-auto`, so it scrolled sideways on
+ *   every handset and the current step was often off-screen. It is now a
+ *   vertical timeline below `md` and horizontal from `md` up, and the timeline
+ *   and the step rail — which used to duplicate each other — are one thing.
+ * - **One subscription.** `currentStatus` was in the effect's dependency list,
+ *   so every status change tore down the realtime channel and the 6-second
+ *   interval and built new ones; the interval also `return`ed early on a
+ *   finished order instead of stopping. Now the channel is created once, and the
+ *   poll exists only as a fallback and clears itself when the order is done.
+ * - **Real data.** Shop phone from `settings` instead of a hardcoded number,
+ *   delivery fee from the order instead of `|| 60`, the GPS suffix split out of
+ *   the address with `splitAddress`, and pickup orders no longer show a delivery
+ *   block. All of that is shared with /admin and /rider via src/lib/orders.ts.
+ * - The review prompt is the same modal the rest of the site uses, so a rating
+ *   goes through /api/reviews and is actually stored — the old inline section
+ *   inserted straight from the browser, which RLS silently rejected.
+ */
 
 interface OrderTrackerProps {
   order: Order;
@@ -13,393 +58,561 @@ interface OrderTrackerProps {
   settings: Settings | null;
 }
 
-const STATUS_STEPS = [
-  { key: "pending", label: "Order Placed", icon: "receipt" },
-  { key: "preparing", label: "Preparing", icon: "restaurant" },
-  { key: "ready", label: "Ready", icon: "check_circle" },
-  { key: "delivering", label: "Out for Delivery", icon: "delivery_dining" },
-  { key: "completed", label: "Delivered", icon: "done_all" },
-] as const;
+type Step = {
+  label: string;
+  icon: string;
+  /** Statuses that mean "this step is the current one". */
+  statuses: OrderStatus[];
+  at: (order: Order) => string | null;
+};
 
-export function OrderTracker({ order, items, settings }: OrderTrackerProps) {
-  const router = useRouter();
-  const [currentStatus, setCurrentStatus] = useState(order.status);
-  const [estimatedTime] = useState<number | null>(order.eta_minutes || null);
+const STEPS: Step[] = [
+  {
+    label: "Order placed",
+    icon: "receipt_long",
+    statuses: ["pending"],
+    at: (o) => o.placed_at,
+  },
+  {
+    label: "Preparing",
+    icon: "outdoor_grill",
+    statuses: ["preparing"],
+    at: (o) => o.preparing_at || o.confirmed_at,
+  },
+  {
+    label: "Ready",
+    icon: "shopping_bag",
+    statuses: ["ready"],
+    at: (o) => o.ready_at,
+  },
+  {
+    label: "On the way",
+    icon: "delivery_dining",
+    statuses: ["picked_up", "delivering", "out_for_delivery"],
+    at: (o) => o.delivering_at || o.picked_up_at || null,
+  },
+  {
+    label: "Delivered",
+    icon: "check_circle",
+    statuses: ["completed", "delivered"],
+    at: (o) => o.completed_at,
+  },
+];
 
-  // Handle hash-based navigation on mount
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
+/** Where the given status sits on the rail. -1 for cancelled. */
+function stepIndexFor(status: OrderStatus): number {
+  if (status === "cancelled") return -1;
+  const index = STEPS.findIndex((step) => step.statuses.includes(status));
+  return index === -1 ? 0 : index;
+}
 
-    if (!window.location.hash) return;
+const HEADLINES: Record<string, { title: string; sub: string }> = {
+  pending: { title: "Order received", sub: "The kitchen is confirming it now." },
+  preparing: { title: "Your food is cooking", sub: "Made fresh to order." },
+  ready: { title: "Ready to go", sub: "Waiting for a rider to pick it up." },
+  picked_up: { title: "On the way", sub: "Your rider has your order." },
+  delivering: { title: "On the way", sub: "Your rider has your order." },
+  out_for_delivery: { title: "On the way", sub: "Your rider has your order." },
+  completed: { title: "Delivered", sub: "Enjoy your food!" },
+  delivered: { title: "Delivered", sub: "Enjoy your food!" },
+  cancelled: { title: "Order cancelled", sub: "Nothing has been charged." },
+};
 
-    const hash = window.location.hash;
+/** Realtime can drop; this is the backstop, not the mechanism. */
+const POLL_MS = 20000;
 
-    // Clear invalid hashes after a short delay
-    const timeout = setTimeout(() => {
-      if (hash && !document.querySelector(hash)) {
-        window.history.replaceState(null, '', window.location.pathname);
-      }
-    }, 1000);
+export function OrderTracker({ order: initialOrder, items, settings }: OrderTrackerProps) {
+  const [order, setOrder] = useState<Order>(initialOrder);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const pollRef = useRef<number | null>(null);
 
-    return () => clearTimeout(timeout);
+  // Whether this order has already been reviewed/snoozed, read from
+  // localStorage through an external store so it never diverges between the
+  // server render (always "not handled") and the client, and so it updates the
+  // moment the modal records a rating.
+  const handled = useSyncExternalStore(
+    subscribeReviewed,
+    () => isOrderHandled(initialOrder.id),
+    () => false
+  );
+
+  const status = order.status;
+  const finished = isDoneStatus(status) || status === "cancelled";
+  const stepIndex = stepIndexFor(status);
+  const parsedNote = parseOrderNote(order.customer_note);
+  const isPickup = isPickupOrder(order, parsedNote);
+  const { street, pin } = splitAddress(order.customer_address);
+  const headline = HEADLINES[status] ?? HEADLINES.pending;
+
+  const shopPhone = settings?.phone || settings?.whatsapp_number || "";
+
+  const reviewableItems: ReviewableItem[] = items
+    .filter((item): item is OrderItem & { item_id: string } => Boolean(item.item_id))
+    .filter(
+      (item, index, all) => all.findIndex((i) => i.item_id === item.item_id) === index
+    )
+    .map((item) => ({ itemId: item.item_id, name: item.name_snapshot }));
+
+  const stopPolling = useCallback(() => {
+    if (pollRef.current !== null) {
+      window.clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
   }, []);
 
+  // One channel, one interval, created once. `order` is deliberately not a
+  // dependency — the callbacks update it, and listing it here is what made the
+  // old version rebuild its subscription on every status change.
   useEffect(() => {
     const supabase = createBrowserClient();
-    let channel: RealtimeChannel;
+    const channel = supabase
+      .channel(`order-tracker:${initialOrder.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "orders",
+          filter: `id=eq.${initialOrder.id}`,
+        },
+        (payload) => {
+          const next = payload.new as Order;
+          if (next?.status) setOrder((prev) => ({ ...prev, ...next }));
+        }
+      )
+      .subscribe();
 
-    // 1. Subscribe to order status changes via Supabase Realtime
-    const setupRealtime = () => {
-      channel = supabase
-        .channel(`order:${order.id}`)
-        .on(
-          "postgres_changes",
-          {
-            event: "UPDATE",
-            schema: "public",
-            table: "orders",
-            filter: `id=eq.${order.id}`,
-          },
-          (payload) => {
-            const newStatus = payload.new.status;
-            if (newStatus) {
-              setCurrentStatus(newStatus);
-              console.log("Order status updated:", newStatus);
-            }
-          }
-        )
-        .subscribe();
+    const poll = async () => {
+      try {
+        const res = await fetch(`/api/orders/${initialOrder.id}`, { cache: "no-store" });
+        if (!res.ok) return;
+        const data = (await res.json()) as { order?: Order };
+        if (data.order?.status) {
+          setOrder((prev) =>
+            data.order!.status === prev.status ? prev : { ...prev, ...data.order! }
+          );
+        }
+      } catch {
+        // Offline or a hiccup — realtime or the next tick will catch up.
+      }
     };
 
-    setupRealtime();
-
-    // 2. Polling fallback (every 6 seconds while order is active)
-    const pollInterval = setInterval(async () => {
-      if (currentStatus === "completed" || currentStatus === "cancelled") {
-        return;
-      }
-      try {
-        const res = await fetch(`/api/orders/${order.id}`);
-        if (res.ok) {
-          const data = await res.json();
-          if (data.order?.status && data.order.status !== currentStatus) {
-            setCurrentStatus(data.order.status);
-          }
-        }
-      } catch (err) {
-        // silent fallback
-      }
-    }, 6000);
+    pollRef.current = window.setInterval(() => {
+      void poll();
+    }, POLL_MS);
 
     return () => {
-      if (channel) {
-        supabase.removeChannel(channel);
-      }
-      clearInterval(pollInterval);
+      supabase.removeChannel(channel);
+      stopPolling();
     };
-  }, [order.id, currentStatus]);
+  }, [initialOrder.id, stopPolling]);
 
-  const getCurrentStepIndex = () => {
-    return STATUS_STEPS.findIndex((step) => step.key === currentStatus);
-  };
+  // Nothing left to poll for once the order is finished.
+  useEffect(() => {
+    if (finished) stopPolling();
+  }, [finished, stopPolling]);
 
-  const stepIndex = getCurrentStepIndex();
-
-  // Calculate estimated delivery time
-  const getEstimatedTime = () => {
-    if (currentStatus === "completed") return "Delivered!";
-    if (currentStatus === "delivering") return "Arriving soon!";
-    if (currentStatus === "ready") return "Driver is picking up";
-    if (currentStatus === "preparing") return "Cooking your order";
-    return estimatedTime ? `${estimatedTime} mins` : "Estimated time TBD";
-  };
+  const canReview =
+    isDoneStatus(status) && reviewableItems.length > 0 && !handled;
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-8">
-      {/* Navigation */}
-      <div className="mb-6 flex flex-wrap items-center gap-3">
-        <button
-          onClick={() => router.push("/")}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[var(--color-surface-container)] text-sm font-semibold hover:bg-[var(--color-surface-container-highest)] transition-colors"
+    <div className="mx-auto max-w-3xl px-4 pb-16 pt-5 sm:pt-8">
+      {/* ------------------------------------------------------------- nav */}
+      <div className="mb-5 flex items-center justify-between gap-3">
+        <Link
+          href="/orders"
+          className="inline-flex items-center gap-1.5 rounded-full bg-[var(--color-surface-container)] px-3.5 py-2 text-xs font-bold text-[var(--color-on-surface)] transition-colors hover:bg-[var(--color-surface-container-highest)]"
         >
-          <span className="material-symbols-outlined text-[18px]">arrow_back</span>
-          Back to Menu
-        </button>
-        <button
-          onClick={() => router.push("/orders")}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[var(--color-surface-container)] text-sm font-semibold hover:bg-[var(--color-surface-container-highest)] transition-colors"
-        >
-          <span className="material-symbols-outlined text-[18px]">shopping_bag</span>
-          My Orders
-        </button>
-        <a
-          href={`tel:${settings?.phone || "+923029359694"}`}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[var(--color-primary)] text-white text-sm font-semibold hover:bg-[var(--color-primary-container)] transition-colors"
-        >
-          <span className="material-symbols-outlined text-[18px]">call</span>
-          Call Restaurant
-        </a>
+          <span className="material-symbols-outlined text-[17px]">arrow_back</span>
+          My orders
+        </Link>
+        {shopPhone && (
+          <a
+            href={`tel:${shopPhone}`}
+            className="inline-flex items-center gap-1.5 rounded-full bg-[var(--color-primary)] px-3.5 py-2 text-xs font-bold text-white transition-colors hover:brightness-110"
+          >
+            <span className="material-symbols-outlined text-[17px]">call</span>
+            Call the shop
+          </a>
+        )}
       </div>
 
-      {/* Header */}
-      <div className="mb-8">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-2">
-          <div>
-            <h1 className="text-2xl md:text-3xl font-extrabold text-[var(--color-primary)]">
-              Order Tracking
+      {/* --------------------------------------------------------- headline */}
+      <header
+        className={`rounded-3xl border p-5 sm:p-6 ${
+          status === "cancelled"
+            ? "border-red-200 bg-red-50"
+            : isDoneStatus(status)
+              ? "border-emerald-200 bg-emerald-50"
+              : "border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)]"
+        }`}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-[var(--color-on-surface-variant)]">
+              Order {order.order_number}
+            </p>
+            <h1 className="mt-1 text-xl font-black leading-tight text-[var(--color-on-surface)] sm:text-2xl">
+              {headline.title}
             </h1>
-            <p className="text-sm text-[var(--color-on-surface-variant)] mt-1">
-              Order #{order.order_number}
+            <p className="mt-1 text-xs text-[var(--color-on-surface-variant)] sm:text-sm">
+              {headline.sub}
             </p>
           </div>
-          <div className="text-left md:text-right">
-            <p className="text-2xl font-bold text-[var(--color-secondary-brand)]">
-              {getEstimatedTime()}
-            </p>
-          </div>
+          <span
+            className={`mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl sm:h-12 sm:w-12 ${
+              status === "cancelled"
+                ? "bg-red-100 text-red-700"
+                : isDoneStatus(status)
+                  ? "bg-emerald-100 text-emerald-700"
+                  : "bg-[var(--color-primary)]/10 text-[var(--color-primary)]"
+            }`}
+          >
+            <span className="material-symbols-outlined text-[24px]">
+              {status === "cancelled"
+                ? "cancel"
+                : STEPS[Math.max(0, stepIndex)].icon}
+            </span>
+          </span>
         </div>
-      </div>
 
-      {/* Progress Steps */}
-      <div className="mb-8 overflow-x-auto">
-        <div className="flex items-center min-w-max gap-2">
-          {STATUS_STEPS.map((step, index) => {
-            const isCompleted = index < stepIndex;
-            const isCurrent = index === stepIndex;
-            return (
-              <div key={step.key} className="flex items-center">
-                <div className="flex flex-col items-center">
-                  <div
-                    className={`w-12 h-12 rounded-full flex items-center justify-center transition-all duration-300 ${
-                      isCompleted
-                        ? "bg-[var(--color-success)] text-white"
+        <dl className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-1.5 border-t border-black/5 pt-3 text-xs">
+          <div className="flex items-center gap-1.5">
+            <dt className="font-bold text-[var(--color-on-surface-variant)]">Placed</dt>
+            <dd className="font-extrabold text-[var(--color-on-surface)]">
+              {timeAgo(order.placed_at)}
+            </dd>
+          </div>
+          {!finished && order.eta_minutes > 0 && (
+            <div className="flex items-center gap-1.5">
+              <dt className="font-bold text-[var(--color-on-surface-variant)]">
+                Estimated
+              </dt>
+              <dd className="font-extrabold text-[var(--color-on-surface)]">
+                {order.eta_minutes} min
+              </dd>
+            </div>
+          )}
+          <div className="flex items-center gap-1.5">
+            <dt className="font-bold text-[var(--color-on-surface-variant)]">
+              {parsedNote.isCod ? "Cash on delivery" : "Paid"}
+            </dt>
+            <dd className="font-extrabold text-[var(--color-on-surface)]">
+              {formatRupees(order.total)}
+            </dd>
+          </div>
+        </dl>
+      </header>
+
+      {/* ---------------------------------------------------------- progress */}
+      {status !== "cancelled" && (
+        <section
+          aria-label="Order progress"
+          className="mt-4 rounded-3xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] p-5 sm:p-6"
+        >
+          {/* Mobile: a vertical timeline that always fits. */}
+          <ol className="relative space-y-0 md:hidden">
+            {STEPS.map((step, index) => {
+              const isPast = index < stepIndex;
+              const isCurrent = index === stepIndex;
+              const at = step.at(order);
+              const isLast = index === STEPS.length - 1;
+
+              return (
+                <li key={step.label} className="relative flex gap-3.5 pb-5 last:pb-0">
+                  {!isLast && (
+                    <span
+                      aria-hidden="true"
+                      className={`absolute left-[15px] top-8 h-[calc(100%-2rem)] w-0.5 rounded-full ${
+                        isPast ? "bg-emerald-500" : "bg-[var(--color-outline-variant)]"
+                      }`}
+                    />
+                  )}
+                  <span
+                    className={`relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
+                      isPast
+                        ? "bg-emerald-500 text-white"
                         : isCurrent
-                        ? "bg-[var(--color-primary)] text-white animate-pulse"
-                        : "bg-[var(--color-surface-container)] text-[var(--color-on-surface-variant)]"
+                          ? "bg-[var(--color-primary)] text-white ring-4 ring-[var(--color-primary)]/15"
+                          : "bg-[var(--color-surface-container)] text-[var(--color-on-surface-variant)]"
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-[17px]">
+                      {isPast ? "check" : step.icon}
+                    </span>
+                  </span>
+                  <div className="min-w-0 pt-1">
+                    <p
+                      className={`text-sm font-extrabold leading-tight ${
+                        isPast || isCurrent
+                          ? "text-[var(--color-on-surface)]"
+                          : "text-[var(--color-on-surface-variant)]"
+                      }`}
+                    >
+                      {step.label}
+                    </p>
+                    <p className="mt-0.5 text-[11px] font-medium text-[var(--color-on-surface-variant)]">
+                      {at ? clockTime(at) : isCurrent ? "In progress" : "Pending"}
+                    </p>
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
+
+          {/* Desktop: the horizontal rail, with no scroll container. */}
+          <ol className="hidden md:grid md:grid-cols-5 md:gap-2">
+            {STEPS.map((step, index) => {
+              const isPast = index < stepIndex;
+              const isCurrent = index === stepIndex;
+              const at = step.at(order);
+
+              return (
+                <li key={step.label} className="relative flex flex-col items-center">
+                  {index < STEPS.length - 1 && (
+                    <span
+                      aria-hidden="true"
+                      className={`absolute left-1/2 top-5 h-0.5 w-full rounded-full ${
+                        isPast ? "bg-emerald-500" : "bg-[var(--color-outline-variant)]"
+                      }`}
+                    />
+                  )}
+                  <span
+                    className={`relative z-10 flex h-10 w-10 items-center justify-center rounded-full ${
+                      isPast
+                        ? "bg-emerald-500 text-white"
+                        : isCurrent
+                          ? "bg-[var(--color-primary)] text-white ring-4 ring-[var(--color-primary)]/15"
+                          : "bg-[var(--color-surface-container)] text-[var(--color-on-surface-variant)]"
                     }`}
                   >
                     <span className="material-symbols-outlined text-[20px]">
-                      {isCompleted ? "check" : step.icon}
+                      {isPast ? "check" : step.icon}
                     </span>
-                  </div>
-                  <span className="text-xs font-medium mt-2 text-center">
-                    {step.label}
                   </span>
-                </div>
-
-                {index < STATUS_STEPS.length - 1 && (
-                  <div
-                    className={`w-16 h-1 mx-2 rounded-full transition-all duration-300 ${
-                      index < stepIndex ? "bg-[var(--color-success)]" : "bg-[var(--color-surface-container)]"
+                  <p
+                    className={`mt-2 text-center text-xs font-extrabold leading-tight ${
+                      isPast || isCurrent
+                        ? "text-[var(--color-on-surface)]"
+                        : "text-[var(--color-on-surface-variant)]"
                     }`}
-                  />
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Order Details Card */}
-      <div className="bg-[var(--color-surface-container-lowest)] rounded-[var(--radius-2xl)] border border-[var(--color-surface-variant)] p-6 mb-6">
-        <h2 className="text-lg font-bold mb-4">Order Details</h2>
-
-        <div className="space-y-4">
-          {/* Items */}
-          <div className="space-y-3">
-            {items.map((item) => (
-              <div
-                key={item.id}
-                className="flex justify-between items-center p-3 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)]"
-              >
-                <div className="flex items-center gap-3">
-                  <span className="text-sm text-[var(--color-on-surface-variant)]">x{item.quantity}</span>
-                  <span className="font-medium">{item.name_snapshot}</span>
-                </div>
-                <span className="font-semibold">Rs. {item.line_total}</span>
-              </div>
-            ))}
-          </div>
-
-          {/* Totals */}
-          <div className="border-t border-[var(--color-outline-variant)] pt-4 space-y-2">
-            <div className="flex justify-between text-sm">
-              <span className="text-[var(--color-on-surface-variant)]">Subtotal</span>
-              <span>Rs. {order.subtotal}</span>
-            </div>
-            {order.delivery_fee > 0 && (
-              <div className="flex justify-between text-sm">
-                <span className="text-[var(--color-on-surface-variant)]">
-                  Delivery {order.delivery_distance_km ? `(${order.delivery_distance_km} km)` : ""}
-                </span>
-                <span>Rs. {order.delivery_fee}</span>
-              </div>
-            )}
-            <div className="flex justify-between text-base font-bold">
-              <span>Total</span>
-              <span className="text-[var(--color-primary)]">Rs. {order.total}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Dynamic Review Section for Completed / Delivered Orders */}
-      {(currentStatus === "completed" || order.status === "completed" || Boolean(order.completed_at)) && (
-        <OrderReviewSection order={order} items={items} />
+                  >
+                    {step.label}
+                  </p>
+                  <p className="mt-0.5 text-[11px] font-medium text-[var(--color-on-surface-variant)]">
+                    {at ? clockTime(at) : isCurrent ? "In progress" : "—"}
+                  </p>
+                </li>
+              );
+            })}
+          </ol>
+        </section>
       )}
 
-      {/* Customer Info Card */}
-      <div className="bg-[var(--color-surface-container-lowest)] rounded-[var(--radius-2xl)] border border-[var(--color-surface-variant)] p-6">
-        <h2 className="text-lg font-bold mb-4">Delivery Information</h2>
-        <div className="space-y-3 text-sm">
-          <div className="flex items-start gap-3">
-            <span className="material-symbols-outlined text-[var(--color-on-surface-variant)] mt-0.5">person</span>
-            <div>
-              <p className="font-medium">{order.customer_name}</p>
-              <p className="text-[var(--color-on-surface-variant)]">{order.customer_phone}</p>
+      {status === "cancelled" && order.cancellation_reason && (
+        <p className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-xs font-medium text-red-800">
+          <span className="font-black">Reason: </span>
+          {order.cancellation_reason}
+        </p>
+      )}
+
+      {/* ------------------------------------------------------------ review */}
+      {canReview && (
+        <section className="mt-4 rounded-3xl border border-amber-300/80 bg-gradient-to-br from-amber-50/90 via-white to-amber-50/40 p-5 shadow-xs">
+          <div className="flex items-start gap-3.5">
+            <span className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-400 to-amber-500 text-slate-900 shadow-sm shadow-amber-500/20">
+              <span className="material-symbols-outlined text-[24px]">rate_review</span>
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5 mb-1">
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-amber-800 bg-amber-200/70 px-2.5 py-0.5 rounded-full">
+                  Customer Feedback
+                </span>
+              </div>
+              <h2 className="text-base font-black text-[var(--color-on-surface)]">
+                How was your meal?
+              </h2>
+              <p className="mt-1 text-xs leading-relaxed text-[var(--color-on-surface-variant)]">
+                Rate what you ordered — it only takes a few seconds and helps other customers order with confidence.
+              </p>
+              <button
+                type="button"
+                onClick={() => setReviewOpen(true)}
+                className="btn-shine mt-3.5 inline-flex items-center gap-2 rounded-full bg-[var(--color-primary)] px-5 py-2.5 text-xs font-black text-white shadow-sm hover:shadow-md transition-all hover:brightness-110 active:scale-[0.98]"
+              >
+                <span className="material-symbols-outlined text-[17px] text-[#FFC700] filled">star</span>
+                Rate {reviewableItems.length === 1 ? "this item" : "your order"}
+              </button>
             </div>
           </div>
-          <div className="flex items-start gap-3">
-            <span className="material-symbols-outlined text-[var(--color-on-surface-variant)] mt-0.5">location_on</span>
-            <p className="flex-1">{order.customer_address}</p>
+        </section>
+      )}
+
+      {isDoneStatus(status) && handled && !reviewOpen && (
+        <div className="mt-4 flex items-center justify-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50/80 p-3.5 text-xs font-bold text-emerald-800 shadow-xs">
+          <span className="material-symbols-outlined text-[18px] filled text-emerald-600">verified</span>
+          <span>Thank you for reviewing your order!</span>
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------- items */}
+      <section className="mt-4 rounded-3xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] p-5 sm:p-6">
+        <h2 className="text-sm font-black uppercase tracking-wide text-[var(--color-on-surface)]">
+          Your order
+        </h2>
+
+        <ul className="mt-3 divide-y divide-[var(--color-outline-variant)]/60">
+          {items.map((item) => (
+            <li key={item.id} className="flex items-center justify-between gap-3 py-2.5">
+              <div className="flex min-w-0 items-center gap-2.5">
+                <span className="shrink-0 rounded-md bg-[var(--color-surface-container)] px-1.5 py-0.5 text-[11px] font-black text-[var(--color-on-surface-variant)]">
+                  ×{item.quantity}
+                </span>
+                <span className="truncate text-sm font-bold text-[var(--color-on-surface)]">
+                  {item.name_snapshot}
+                </span>
+              </div>
+              <span className="shrink-0 text-sm font-extrabold text-[var(--color-on-surface)]">
+                {formatRupees(item.line_total)}
+              </span>
+            </li>
+          ))}
+        </ul>
+
+        <dl className="mt-3 space-y-1.5 border-t border-[var(--color-outline-variant)] pt-3 text-sm">
+          <div className="flex justify-between">
+            <dt className="text-[var(--color-on-surface-variant)]">Subtotal</dt>
+            <dd className="font-bold">{formatRupees(order.subtotal)}</dd>
           </div>
-          {order.customer_note && (
-            <div className="flex items-start gap-3">
-              <span className="material-symbols-outlined text-[var(--color-on-surface-variant)] mt-0.5">note</span>
-              <p className="flex-1 text-[var(--color-on-surface-variant)] italic">&ldquo;{order.customer_note}&rdquo;</p>
+          {order.discount > 0 && (
+            <div className="flex justify-between text-emerald-700">
+              <dt>Discount</dt>
+              <dd className="font-bold">−{formatRupees(order.discount)}</dd>
             </div>
           )}
-
-          {/* Delivery Coordinates and Navigation */}
-          <div className="mt-4 p-4 rounded-xl bg-[var(--color-surface-container-low)] space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-[16px] text-[var(--color-primary)]">straight</span>
-                <span className="text-xs text-[var(--color-on-surface-variant)]">
-                  {order.delivery_distance_km ? `${order.delivery_distance_km.toFixed(1)} km` : "Standard delivery"}
-                </span>
-              </div>
-              <span className="font-bold text-sm text-[var(--color-primary)]">
-                Delivery: Rs. {order.delivery_fee || 60}
-              </span>
+          {!isPickup && (
+            <div className="flex justify-between">
+              <dt className="text-[var(--color-on-surface-variant)]">
+                Delivery
+                {order.delivery_distance_km
+                  ? ` (${order.delivery_distance_km.toFixed(1)} km)`
+                  : ""}
+              </dt>
+              <dd className="font-bold">
+                {order.delivery_fee > 0 ? formatRupees(order.delivery_fee) : "Free"}
+              </dd>
             </div>
-
-            {order.delivery_coordinates && (
-              <div className="flex items-center gap-2 text-xs text-[var(--color-on-surface-variant)]">
-                <span className="material-symbols-outlined text-[14px]">my_location</span>
-                <span>
-                  {order.delivery_coordinates.lat.toFixed(6)}, {order.delivery_coordinates.lng.toFixed(6)}
-                </span>
-              </div>
-            )}
-
-            <a
-              href={
-                order.delivery_coordinates
-                  ? `https://www.google.com/maps/search/?api=1&query=${order.delivery_coordinates.lat},${order.delivery_coordinates.lng}`
-                  : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(order.customer_address)}`
-              }
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[var(--color-primary)] text-white text-xs font-bold hover:bg-[var(--color-primary-container)] transition-colors"
-            >
-              <span className="material-symbols-outlined text-[16px]">navigation</span>
-              Navigate in Google Maps
-            </a>
+          )}
+          <div className="flex justify-between border-t border-[var(--color-outline-variant)] pt-2 text-base">
+            <dt className="font-black">Total</dt>
+            <dd className="font-black text-[var(--color-primary)]">
+              {formatRupees(order.total)}
+            </dd>
           </div>
-        </div>
-      </div>
+        </dl>
+      </section>
 
-      {/* Status Timeline */}
-      <div className="mt-6 bg-[var(--color-surface-container-lowest)] rounded-[var(--radius-2xl)] border border-[var(--color-surface-variant)] p-6">
-        <h2 className="text-lg font-bold mb-6">Order Timeline</h2>
-        <div className="relative space-y-0">
-          {/* Vertical connecting line */}
-          <div className="absolute left-4 top-3 bottom-3 w-0.5 bg-[var(--color-outline-variant)]" />
+      {/* ---------------------------------------------------------- delivery */}
+      <section className="mt-4 rounded-3xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] p-5 sm:p-6">
+        <h2 className="text-sm font-black uppercase tracking-wide text-[var(--color-on-surface)]">
+          {isPickup ? "Pickup details" : "Delivery details"}
+        </h2>
 
-          <div className="relative flex gap-4 pb-5">
-            <div className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${currentStatus === "pending" ? "bg-[var(--color-primary)] text-white animate-pulse" : "bg-[var(--color-success)] text-white"}`}>
-              <span className="material-symbols-outlined text-[16px]">receipt</span>
-            </div>
-            <div className="pt-1.5">
-              <p className="font-semibold">Order Placed</p>
-              <p className="text-[var(--color-on-surface-variant)] text-xs mt-0.5">
-                {new Date(order.placed_at).toLocaleString()}
+        <div className="mt-3 space-y-3 text-sm">
+          <div className="flex items-start gap-2.5">
+            <span className="material-symbols-outlined mt-0.5 text-[18px] text-[var(--color-on-surface-variant)]">
+              person
+            </span>
+            <div className="min-w-0">
+              <p className="font-bold text-[var(--color-on-surface)]">
+                {order.customer_name}
+              </p>
+              <p className="text-xs text-[var(--color-on-surface-variant)]">
+                {order.customer_phone}
               </p>
             </div>
           </div>
 
-          {order.confirmed_at && (
-            <div className="relative flex gap-4 pb-5">
-              <div className="shrink-0 w-8 h-8 rounded-full flex items-center justify-center bg-[var(--color-success)] text-white">
-                <span className="material-symbols-outlined text-[16px]">check_circle</span>
-              </div>
-              <div className="pt-1.5">
-                <p className="font-semibold">Order Confirmed</p>
-                <p className="text-[var(--color-on-surface-variant)] text-xs mt-0.5">
-                  {new Date(order.confirmed_at).toLocaleString()}
+          {!isPickup && (
+            <div className="flex items-start gap-2.5">
+              <span className="material-symbols-outlined mt-0.5 text-[18px] text-[var(--color-on-surface-variant)]">
+                location_on
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="break-words text-[var(--color-on-surface)]">
+                  {street || order.customer_address}
                 </p>
+                {pin && (
+                  <a
+                    href={getMapsUrl(order)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-1 inline-flex items-center gap-1 text-xs font-bold text-[var(--color-primary)] hover:underline"
+                  >
+                    <span className="material-symbols-outlined text-[15px]">
+                      my_location
+                    </span>
+                    View the pin you dropped
+                  </a>
+                )}
               </div>
             </div>
           )}
 
-          {order.preparing_at && (
-            <div className="relative flex gap-4 pb-5">
-              <div className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${currentStatus === "preparing" ? "bg-[var(--color-primary)] text-white animate-pulse" : "bg-[var(--color-success)] text-white"}`}>
-                <span className="material-symbols-outlined text-[16px]">restaurant</span>
-              </div>
-              <div className="pt-1.5">
-                <p className="font-semibold">Preparing</p>
-                <p className="text-[var(--color-on-surface-variant)] text-xs mt-0.5">
-                  {new Date(order.preparing_at).toLocaleString()}
-                </p>
-              </div>
-            </div>
-          )}
-
-          {order.ready_at && (
-            <div className="relative flex gap-4 pb-5">
-              <div className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${currentStatus === "ready" ? "bg-[var(--color-primary)] text-white animate-pulse" : "bg-[var(--color-success)] text-white"}`}>
-                <span className="material-symbols-outlined text-[16px]">checklist</span>
-              </div>
-              <div className="pt-1.5">
-                <p className="font-semibold">Ready</p>
-                <p className="text-[var(--color-on-surface-variant)] text-xs mt-0.5">
-                  {new Date(order.ready_at).toLocaleString()}
-                </p>
-              </div>
-            </div>
-          )}
-
-          {order.delivering_at && (
-            <div className="relative flex gap-4 pb-5">
-              <div className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${currentStatus === "delivering" ? "bg-[var(--color-primary)] text-white animate-pulse" : "bg-[var(--color-success)] text-white"}`}>
-                <span className="material-symbols-outlined text-[16px]">delivery_dining</span>
-              </div>
-              <div className="pt-1.5">
-                <p className="font-semibold">Out for Delivery</p>
-                <p className="text-[var(--color-on-surface-variant)] text-xs mt-0.5">
-                  {new Date(order.delivering_at).toLocaleString()}
-                </p>
-              </div>
-            </div>
-          )}
-
-          {order.completed_at && (
-            <div className="relative flex gap-4 pb-5">
-              <div className="shrink-0 w-8 h-8 rounded-full flex items-center justify-center bg-[var(--color-success)] text-white">
-                <span className="material-symbols-outlined text-[16px]">done_all</span>
-              </div>
-              <div className="pt-1.5">
-                <p className="font-semibold">Delivered</p>
-                <p className="text-[var(--color-on-surface-variant)] text-xs mt-0.5">
-                  {new Date(order.completed_at).toLocaleString()}
-                </p>
-              </div>
+          {parsedNote.customNote && (
+            <div className="flex items-start gap-2.5">
+              <span className="material-symbols-outlined mt-0.5 text-[18px] text-[var(--color-on-surface-variant)]">
+                sticky_note_2
+              </span>
+              <p className="min-w-0 flex-1 italic text-[var(--color-on-surface-variant)]">
+                &ldquo;{parsedNote.customNote}&rdquo;
+              </p>
             </div>
           )}
         </div>
+
+        {/* Help — customer contact */}
+        {shopPhone && (
+          <div className="mt-4 flex flex-col gap-2 border-t border-[var(--color-outline-variant)] pt-4 sm:flex-row">
+            <a
+              href={`tel:${shopPhone}`}
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-full border border-[var(--color-outline-variant)] px-4 py-2.5 text-xs font-bold text-[var(--color-on-surface)] transition-colors hover:border-[var(--color-primary)] hover:text-[var(--color-primary)]"
+            >
+              <span className="material-symbols-outlined text-[17px]">call</span>
+              Call about this order
+            </a>
+          </div>
+        )}
+      </section>
+
+      <div className="mt-5 text-center">
+        <Link
+          href="/#menu"
+          className="inline-flex items-center gap-2 rounded-full bg-[var(--color-primary)] px-6 py-3 text-sm font-black text-white transition-all hover:brightness-110 active:scale-[0.98]"
+        >
+          <span className="material-symbols-outlined text-[19px]">restaurant_menu</span>
+          Order again
+        </Link>
       </div>
+
+      {reviewOpen && (
+        <ReviewPromptModal
+          target={{
+            orderId: order.id,
+            orderNumber: order.order_number,
+            items: reviewableItems,
+          }}
+          onClose={() => {
+            // "Not now" — postponed, not answered. The card stays on this page.
+            snoozeOrder(order.id);
+            setReviewOpen(false);
+          }}
+          onCompleted={(reviewedItemIds) => {
+            markOrderHandled(order.id, reviewedItemIds);
+            setReviewOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }

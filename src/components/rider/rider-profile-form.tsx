@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { createBrowserClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import type { Rider } from "@/lib/supabase/database.types";
+import { RIDER_TOAST } from "./rider-utils";
 
 interface RiderProfileFormProps {
   initialRider?: Rider | null;
@@ -52,12 +53,12 @@ export function RiderProfileForm({ initialRider }: RiderProfileFormProps) {
     const cleanPhone = phone.replace(/\D/g, "").slice(0, 15);
 
     if (!cleanName) {
-      toast.error("Name is required (max 50 characters)");
+      toast.error("Naam likhna zaroori hai (max 50 harf)", RIDER_TOAST);
       return;
     }
 
     if (!/^03\d{9}$/.test(cleanPhone)) {
-      toast.error("Valid Pakistan phone number required (e.g. 03001234567)");
+      toast.error("Sahi number daalein, jaise 03001234567", RIDER_TOAST);
       return;
     }
 
@@ -75,25 +76,39 @@ export function RiderProfileForm({ initialRider }: RiderProfileFormProps) {
         },
       });
 
-      // 2. Upsert into riders table
-      const { error: riderError } = await supabase
+      // 2. Update the riders row.
+      //
+      // NOT upsert: PostgREST issues upsert as INSERT ... ON CONFLICT, and RLS
+      // evaluates the INSERT policy even when the row already exists. `riders`
+      // grants a rider UPDATE on their own row ("Riders can update own profile",
+      // auth.uid() = user_id) but no INSERT — only admins can create a rider —
+      // so upsert always failed with 42501 and Save could never succeed.
+      const { data: updated, error: riderError } = await supabase
         .from("riders")
-        .upsert(
-          {
-            user_id: user.id,
-            name: cleanName,
-            phone: cleanPhone,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "user_id" }
-        );
+        .update({
+          name: cleanName,
+          phone: cleanPhone,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("user_id", user.id)
+        .select("id");
 
       if (riderError) throw riderError;
 
-      toast.success("Rider profile updated successfully!");
+      // No row matched: this account has no rider record, and the rider cannot
+      // create one themselves. Say who can, rather than failing silently.
+      if (!updated || updated.length === 0) {
+        toast.error(
+          "Aap ka rider record nahi mila. Manager se kehein ke wo aap ko rider banayein.",
+          RIDER_TOAST
+        );
+        return;
+      }
+
+      toast.success("Profile save ho gayi", RIDER_TOAST);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to update profile";
-      toast.error(msg);
+      const msg = err instanceof Error ? err.message : "Profile save nahi hui";
+      toast.error(msg, RIDER_TOAST);
     } finally {
       setSaving(false);
     }
@@ -101,45 +116,55 @@ export function RiderProfileForm({ initialRider }: RiderProfileFormProps) {
 
   if (loading) {
     return (
-      <div className="p-8 text-center text-slate-500 font-medium">
-        Loading profile data...
-      </div>
+      <p className="py-8 text-center text-sm font-bold text-[var(--r-muted)]">
+        Profile load ho rahi hai…
+      </p>
     );
   }
 
+  const fieldClass =
+    "w-full min-h-14 px-4 rounded-2xl border border-[var(--r-line)] bg-[var(--r-bg)] text-[var(--r-text)] text-base font-medium outline-none";
+  const labelClass =
+    "block text-[11px] font-extrabold uppercase tracking-[0.16em] text-[var(--r-muted)] mb-2";
+
   return (
-    <form onSubmit={handleSubmit} className="space-y-5 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm max-w-md">
-      <div className="border-b border-slate-100 pb-3">
-        <h2 className="text-lg font-bold text-slate-900">Rider Profile</h2>
-        <p className="text-xs text-slate-500">Update your name and delivery contact number</p>
-      </div>
+    <form
+      onSubmit={handleSubmit}
+      className="space-y-4 rounded-3xl bg-[var(--r-panel)] border border-[var(--r-line)] p-4"
+    >
+      <p className="text-sm text-[var(--r-muted)] leading-relaxed">
+        Yeh naam aur number customer ko aur admin ko dikhta hai.
+      </p>
 
       <div>
-        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-          Full Name (Max 50 chars)
+        <label htmlFor="rider-name" className={labelClass}>
+          Poora naam
         </label>
         <input
+          id="rider-name"
           type="text"
           maxLength={50}
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="e.g. Muhammad Ali"
-          className="w-full h-11 px-4 rounded-xl border border-slate-300 text-sm focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/10 font-medium"
+          placeholder="Jaise: Muhammad Ali"
+          className={fieldClass}
           required
         />
       </div>
 
       <div>
-        <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-          Contact Phone (03XXXXXXXXX)
+        <label htmlFor="rider-phone" className={labelClass}>
+          Mobile number
         </label>
         <input
+          id="rider-phone"
           type="tel"
+          inputMode="numeric"
           maxLength={15}
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
           placeholder="03001234567"
-          className="w-full h-11 px-4 rounded-xl border border-slate-300 text-sm focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/10 font-medium"
+          className={`${fieldClass} tnum`}
           required
         />
       </div>
@@ -147,18 +172,17 @@ export function RiderProfileForm({ initialRider }: RiderProfileFormProps) {
       <button
         type="submit"
         disabled={saving}
-        className="w-full py-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-sm transition-colors shadow-sm disabled:opacity-50 flex items-center justify-center gap-2"
+        className="w-full min-h-14 rounded-2xl bg-[var(--r-cash)] text-[var(--r-bg)] font-integral text-base flex items-center justify-center gap-2 cursor-pointer active:opacity-85 disabled:opacity-60"
       >
         {saving ? (
           <>
-            <span className="material-symbols-outlined text-[18px] animate-spin">progress_activity</span>
-            Saving...
+            <span className="material-symbols-outlined text-[20px] animate-spin">
+              progress_activity
+            </span>
+            <span>Save ho raha hai…</span>
           </>
         ) : (
-          <>
-            <span className="material-symbols-outlined text-[18px]">save</span>
-            Save Profile Changes
-          </>
+          <span>Save Karein</span>
         )}
       </button>
     </form>

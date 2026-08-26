@@ -5,12 +5,26 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
 import type { User } from "@supabase/supabase-js";
+import dynamic from "next/dynamic";
 import { useCart } from "@/lib/cart-store";
-import { AuthModal } from "./auth-modal";
-import { WelcomeModal } from "./welcome-modal";
 import { getCurrentUser, signOut, onAuthStateChange } from "@/lib/supabase/auth";
 import { isAdminUser } from "@/lib/admin";
 import { toast } from "sonner";
+
+const AuthModal = dynamic(
+  () => import("./auth-modal").then((m) => m.AuthModal),
+  { ssr: false }
+);
+
+/**
+ * Role lookups are cached for the tab.
+ *
+ * `checkUserRole` used to POST /api/auth/sync-profile on every mount, so a
+ * signed-in customer paid a round trip on every client-side navigation just to
+ * re-learn that they are not a rider. The answer cannot change while the session
+ * lasts, so it is remembered per user id and re-fetched only on a real sign-in.
+ */
+const roleCache = new Map<string, boolean>();
 
 export function Header() {
   const [scrolled, setScrolled] = useState(false);
@@ -84,19 +98,26 @@ export function Header() {
       return;
     }
 
+    const cached = roleCache.get(currentUser.id);
+    if (cached !== undefined) {
+      setIsRider(cached);
+      return;
+    }
+
+    let rider = false;
     try {
       const res = await fetch("/api/auth/sync-profile", { method: "POST" });
       if (res.ok) {
         const data = await res.json();
-        if (data.role === "rider") {
-          setIsRider(true);
-          return;
-        }
+        rider = data.role === "rider";
+        // Only a successful answer is worth remembering — a failed request
+        // should be retried on the next navigation, not cached as "customer".
+        roleCache.set(currentUser.id, rider);
       }
     } catch {
-      // fallback
+      // Offline: fall back to "not a rider", which only hides a shortcut.
     }
-    setIsRider(false);
+    setIsRider(rider);
   }, []);
 
   // Check auth state on mount and listen for changes
@@ -487,13 +508,12 @@ export function Header() {
         </div>
       )}
 
-      {/* Auth Modal & Welcome Modal */}
+      {/* Auth Modal */}
       <AuthModal
         isOpen={showAuthModal}
         onClose={() => setShowAuthModal(false)}
         onAuthSuccess={handleAuthSuccess}
       />
-      <WelcomeModal />
     </>
   );
 }

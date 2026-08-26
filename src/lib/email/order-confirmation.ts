@@ -11,6 +11,8 @@ interface OrderConfirmationEmailProps {
   deliveryAddress: string;
   customerPhone: string;
   orderNote?: string;
+  siteUrl?: string;
+  supportPhone?: string;
 }
 
 export function generateOrderConfirmationEmail({
@@ -24,20 +26,25 @@ export function generateOrderConfirmationEmail({
   deliveryAddress,
   customerPhone,
   orderNote,
+  siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://azlanfastfood.com",
+  supportPhone = "0300-0000000",
 }: OrderConfirmationEmailProps): string {
   const firstName = customerName.split(" ")[0] || customerName;
+  const isPickup = deliveryAddress.toLowerCase().includes("pickup");
+  const cleanSiteUrl = siteUrl.replace(/\/$/, "");
+  const trackOrderUrl = `${cleanSiteUrl}/orders/${orderId}`;
 
   const itemsRows = items
     .map(
       (item) => `
       <tr>
-        <td style="padding: 10px 12px; border-bottom: 1px solid #f0f0f0; font-size: 14px; color: #374151;">
-          ${item.name}
+        <td style="padding: 12px 0; border-bottom: 1px solid #f3f4f6; font-size: 14px; color: #1f2937; vertical-align: top;">
+          <div style="font-weight: 600; color: #111827;">${item.name}</div>
         </td>
-        <td style="padding: 10px 12px; border-bottom: 1px solid #f0f0f0; font-size: 14px; color: #374151; text-align: center;">
-          ×${item.quantity}
+        <td style="padding: 12px 12px; border-bottom: 1px solid #f3f4f6; font-size: 13px; color: #6b7280; text-align: center; vertical-align: top; white-space: nowrap;">
+          × ${item.quantity}
         </td>
-        <td style="padding: 10px 12px; border-bottom: 1px solid #f0f0f0; font-size: 14px; color: #00230c; font-weight: 700; text-align: right;">
+        <td style="padding: 12px 0; border-bottom: 1px solid #f3f4f6; font-size: 14px; font-weight: 600; color: #111827; text-align: right; vertical-align: top; white-space: nowrap;">
           Rs. ${(item.price * item.quantity).toLocaleString()}
         </td>
       </tr>
@@ -45,70 +52,66 @@ export function generateOrderConfirmationEmail({
     )
     .join("");
 
-  const isPickup = deliveryAddress.toLowerCase().includes("pickup");
-
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Order Confirmed – ${orderNumber}</title>
+  <title>Order Confirmation – ${orderNumber}</title>
 </head>
-<body style="margin: 0; padding: 0; background-color: #f4f5f7; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+<body style="margin: 0; padding: 0; background-color: #f9fafb; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1f2937; -webkit-font-smoothing: antialiased;">
 
-  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f4f5f7; padding: 32px 16px;">
+  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #f9fafb; padding: 40px 16px;">
     <tr>
       <td align="center">
-        <table width="600" cellpadding="0" cellspacing="0" style="max-width: 600px; width: 100%; background: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.08);">
+        <!-- Main Card -->
+        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 540px; background-color: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden;">
 
-          <!-- Header -->
+          <!-- Brand Header -->
           <tr>
-            <td style="background: linear-gradient(135deg, #00230c 0%, #014d1b 100%); padding: 36px 40px; text-align: center;">
-              <h1 style="margin: 0 0 4px; font-size: 28px; font-weight: 900; color: #FFC700; letter-spacing: -0.5px;">
-                Azlan Fast Food
+            <td style="padding: 32px 32px 24px; text-align: center; border-bottom: 1px solid #f3f4f6;">
+              <h1 style="margin: 0; font-size: 16px; font-weight: 800; letter-spacing: 2.5px; text-transform: uppercase; color: #00230c;">
+                AZLAN FAST FOOD &amp; BBQ
               </h1>
-              <p style="margin: 0; font-size: 13px; color: #86efac; letter-spacing: 0.5px;">
-                &amp; BBQ Point • Malir, Karachi
+              <p style="margin: 4px 0 0; font-size: 11px; color: #9ca3af; letter-spacing: 1px; text-transform: uppercase;">
+                Karachi, Pakistan
               </p>
             </td>
           </tr>
 
-          <!-- Hero Status Banner -->
+          <!-- Main Status Header -->
           <tr>
-            <td style="background: #FFC700; padding: 20px 40px; text-align: center;">
-              <p style="margin: 0 0 4px; font-size: 13px; font-weight: 700; color: #78350f; text-transform: uppercase; letter-spacing: 1px;">
-                ✅ Order Confirmed
-              </p>
-              <h2 style="margin: 0; font-size: 24px; font-weight: 900; color: #1c1917;">
-                ${orderNumber}
+            <td style="padding: 28px 32px 20px;">
+              <div style="display: inline-block; background-color: #f3f4f6; color: #374151; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 4px; letter-spacing: 0.8px; text-transform: uppercase; margin-bottom: 12px;">
+                Order #${orderNumber}
+              </div>
+              <h2 style="margin: 0 0 8px; font-size: 22px; font-weight: 700; color: #111827; letter-spacing: -0.3px;">
+                Order Confirmed
               </h2>
-            </td>
-          </tr>
-
-          <!-- Greeting -->
-          <tr>
-            <td style="padding: 32px 40px 20px;">
-              <p style="margin: 0; font-size: 17px; color: #111827; font-weight: 600;">
-                Salaam ${firstName}! 🎉
-              </p>
-              <p style="margin: 10px 0 0; font-size: 14px; color: #6b7280; line-height: 1.6;">
-                Your order has been successfully placed and our kitchen team is already getting to work. We'll have your food ready soon!
+              <p style="margin: 0; font-size: 14px; color: #4b5563; line-height: 1.6;">
+                Salaam ${firstName}, your order has been received and is being prepared with fresh ingredients.
               </p>
             </td>
           </tr>
 
-          <!-- Order Items -->
+          <!-- Action Button -->
           <tr>
-            <td style="padding: 0 40px 24px;">
-              <h3 style="margin: 0 0 12px; font-size: 13px; font-weight: 700; color: #374151; text-transform: uppercase; letter-spacing: 0.8px;">
-                🍔 Your Order
-              </h3>
-              <table width="100%" cellpadding="0" cellspacing="0" style="border-radius: 10px; overflow: hidden; border: 1px solid #e5e7eb;">
+            <td style="padding: 0 32px 24px;">
+              <a href="${trackOrderUrl}" target="_blank" style="display: inline-block; background-color: #00230c; color: #ffffff; font-size: 13px; font-weight: 600; text-decoration: none; padding: 11px 24px; border-radius: 6px; letter-spacing: 0.3px;">
+                Track Order Status →
+              </a>
+            </td>
+          </tr>
+
+          <!-- Items Table -->
+          <tr>
+            <td style="padding: 0 32px 16px;">
+              <table width="100%" cellpadding="0" cellspacing="0" border="0">
                 <thead>
-                  <tr style="background: #f9fafb;">
-                    <th style="padding: 10px 12px; font-size: 11px; font-weight: 700; color: #9ca3af; text-align: left; text-transform: uppercase; letter-spacing: 0.6px;">Item</th>
-                    <th style="padding: 10px 12px; font-size: 11px; font-weight: 700; color: #9ca3af; text-align: center; text-transform: uppercase; letter-spacing: 0.6px;">Qty</th>
-                    <th style="padding: 10px 12px; font-size: 11px; font-weight: 700; color: #9ca3af; text-align: right; text-transform: uppercase; letter-spacing: 0.6px;">Price</th>
+                  <tr style="border-bottom: 1px solid #e5e7eb;">
+                    <th style="padding: 8px 0; font-size: 11px; font-weight: 700; color: #9ca3af; text-align: left; text-transform: uppercase; letter-spacing: 0.8px;">Item</th>
+                    <th style="padding: 8px 12px; font-size: 11px; font-weight: 700; color: #9ca3af; text-align: center; text-transform: uppercase; letter-spacing: 0.8px;">Qty</th>
+                    <th style="padding: 8px 0; font-size: 11px; font-weight: 700; color: #9ca3af; text-align: right; text-transform: uppercase; letter-spacing: 0.8px;">Price</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -118,111 +121,105 @@ export function generateOrderConfirmationEmail({
             </td>
           </tr>
 
-          <!-- Totals -->
+          <!-- Totals Calculation -->
           <tr>
-            <td style="padding: 0 40px 24px;">
-              <table width="100%" cellpadding="0" cellspacing="0" style="background: #f9fafb; border-radius: 10px; padding: 16px; border: 1px solid #e5e7eb;">
+            <td style="padding: 0 32px 28px;">
+              <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top: 4px;">
                 <tr>
-                  <td style="padding: 6px 0; font-size: 13px; color: #6b7280;">Subtotal</td>
-                  <td style="padding: 6px 0; font-size: 13px; color: #374151; font-weight: 600; text-align: right;">Rs. ${subtotal.toLocaleString()}</td>
-                </tr>
-                ${
-                  !isPickup
-                    ? `<tr>
-                  <td style="padding: 6px 0; font-size: 13px; color: #6b7280;">Delivery Fee</td>
-                  <td style="padding: 6px 0; font-size: 13px; color: #374151; font-weight: 600; text-align: right;">Rs. ${deliveryFee.toLocaleString()}</td>
-                </tr>`
-                    : `<tr>
-                  <td style="padding: 6px 0; font-size: 13px; color: #16a34a;">Delivery</td>
-                  <td style="padding: 6px 0; font-size: 13px; color: #16a34a; font-weight: 600; text-align: right;">Store Pickup</td>
-                </tr>`
-                }
-                <tr>
-                  <td colspan="2" style="padding-top: 10px; border-top: 1px solid #d1d5db;"></td>
+                  <td style="padding: 4px 0; font-size: 13px; color: #6b7280;">Subtotal</td>
+                  <td style="padding: 4px 0; font-size: 13px; color: #374151; font-weight: 500; text-align: right;">Rs. ${subtotal.toLocaleString()}</td>
                 </tr>
                 <tr>
-                  <td style="padding: 4px 0; font-size: 16px; font-weight: 900; color: #00230c;">Total</td>
-                  <td style="padding: 4px 0; font-size: 18px; font-weight: 900; color: #00230c; text-align: right;">Rs. ${total.toLocaleString()}</td>
+                  <td style="padding: 4px 0; font-size: 13px; color: #6b7280;">
+                    ${isPickup ? "Delivery" : "Delivery Fee"}
+                  </td>
+                  <td style="padding: 4px 0; font-size: 13px; color: #374151; font-weight: 500; text-align: right;">
+                    ${isPickup ? "Store Pickup (Free)" : `Rs. ${deliveryFee.toLocaleString()}`}
+                  </td>
+                </tr>
+                <tr>
+                  <td colspan="2" style="padding-top: 8px; border-bottom: 1px solid #e5e7eb;"></td>
+                </tr>
+                <tr>
+                  <td style="padding: 10px 0 0; font-size: 15px; font-weight: 700; color: #111827;">Total Payable</td>
+                  <td style="padding: 10px 0 0; font-size: 16px; font-weight: 800; color: #00230c; text-align: right;">Rs. ${total.toLocaleString()}</td>
                 </tr>
               </table>
             </td>
           </tr>
 
-          <!-- Delivery Details -->
+          <!-- Delivery & Order Info -->
           <tr>
-            <td style="padding: 0 40px 24px;">
-              <table width="100%" cellpadding="0" cellspacing="0" style="border-radius: 10px; overflow: hidden; border: 1px solid #e5e7eb;">
-                <tr>
-                  <td style="background: #f9fafb; padding: 14px 16px; border-bottom: 1px solid #e5e7eb;">
-                    <p style="margin: 0; font-size: 11px; font-weight: 700; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.6px;">
-                      📍 ${isPickup ? "Pickup Location" : "Delivery Address"}
-                    </p>
-                    <p style="margin: 4px 0 0; font-size: 13px; color: #374151;">${deliveryAddress}</p>
-                  </td>
-                </tr>
-                <tr>
-                  <td style="background: #f9fafb; padding: 14px 16px;">
-                    <p style="margin: 0; font-size: 11px; font-weight: 700; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.6px;">
-                      📞 Contact Number
-                    </p>
-                    <p style="margin: 4px 0 0; font-size: 13px; color: #374151;">${customerPhone}</p>
-                  </td>
-                </tr>
-                ${
-                  orderNote
-                    ? `<tr>
-                  <td style="background: #fffbeb; padding: 14px 16px; border-top: 1px solid #e5e7eb;">
-                    <p style="margin: 0; font-size: 11px; font-weight: 700; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.6px;">
-                      📝 Special Note
-                    </p>
-                    <p style="margin: 4px 0 0; font-size: 13px; color: #374151;">${orderNote}</p>
-                  </td>
-                </tr>`
-                    : ""
-                }
-              </table>
-            </td>
-          </tr>
-
-          <!-- Payment Method -->
-          <tr>
-            <td style="padding: 0 40px 24px;">
-              <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px; padding: 14px 16px; display: flex; align-items: center;">
-                <p style="margin: 0; font-size: 13px; color: #15803d; font-weight: 600;">
-                  💵 Payment: Cash on Delivery — Please keep cash ready upon arrival.
-                </p>
+            <td style="padding: 0 32px 28px;">
+              <div style="background-color: #f9fafb; border: 1px solid #f3f4f6; border-radius: 8px; padding: 18px 20px;">
+                <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                  <tr>
+                    <td style="padding-bottom: 12px; vertical-align: top; width: 50%;">
+                      <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: #9ca3af; letter-spacing: 0.6px; margin-bottom: 3px;">
+                        ${isPickup ? "Pickup Location" : "Delivery Address"}
+                      </div>
+                      <div style="font-size: 13px; color: #1f2937; line-height: 1.4;">
+                        ${deliveryAddress}
+                      </div>
+                    </td>
+                    <td style="padding-bottom: 12px; padding-left: 16px; vertical-align: top; width: 50%;">
+                      <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: #9ca3af; letter-spacing: 0.6px; margin-bottom: 3px;">
+                        Contact Number
+                      </div>
+                      <div style="font-size: 13px; color: #1f2937;">
+                        ${customerPhone}
+                      </div>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding-top: 4px; vertical-align: top;">
+                      <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: #9ca3af; letter-spacing: 0.6px; margin-bottom: 3px;">
+                        Payment
+                      </div>
+                      <div style="font-size: 13px; color: #1f2937; font-weight: 500;">
+                        Cash on Delivery
+                      </div>
+                    </td>
+                    <td style="padding-top: 4px; padding-left: 16px; vertical-align: top;">
+                      <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: #9ca3af; letter-spacing: 0.6px; margin-bottom: 3px;">
+                        Estimated Time
+                      </div>
+                      <div style="font-size: 13px; color: #1f2937; font-weight: 500;">
+                        30 – 45 Minutes
+                      </div>
+                    </td>
+                  </tr>
+                  ${
+                    orderNote
+                      ? `<tr>
+                    <td colspan="2" style="padding-top: 12px;">
+                      <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: #9ca3af; letter-spacing: 0.6px; margin-bottom: 3px;">
+                        Note
+                      </div>
+                      <div style="font-size: 13px; color: #4b5563; font-style: italic;">
+                        "${orderNote}"
+                      </div>
+                    </td>
+                  </tr>`
+                      : ""
+                  }
+                </table>
               </div>
-            </td>
-          </tr>
-
-          <!-- Estimated Time -->
-          <tr>
-            <td style="padding: 0 40px 32px;">
-              <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 10px; padding: 14px 16px; text-align: center;">
-                <p style="margin: 0 0 4px; font-size: 13px; font-weight: 700; color: #1d4ed8;">⏱ Estimated Delivery Time</p>
-                <p style="margin: 0; font-size: 22px; font-weight: 900; color: #1e40af;">30 – 45 Minutes</p>
-              </div>
-            </td>
-          </tr>
-
-          <!-- Divider -->
-          <tr>
-            <td style="padding: 0 40px;">
-              <hr style="border: none; border-top: 1px solid #f0f0f0; margin: 0;" />
             </td>
           </tr>
 
           <!-- Footer -->
           <tr>
-            <td style="padding: 24px 40px 32px; text-align: center;">
-              <p style="margin: 0 0 8px; font-size: 13px; color: #6b7280;">
-                Questions? Call or WhatsApp us directly.
+            <td style="padding: 24px 32px 32px; background-color: #fafaf9; border-top: 1px solid #f3f4f6; text-align: center;">
+              <p style="margin: 0 0 6px; font-size: 13px; font-weight: 600; color: #1f2937;">
+                Azlan Fast Food &amp; BBQ Point
               </p>
-              <p style="margin: 0 0 16px; font-size: 15px; font-weight: 700; color: #00230c;">
-                🍗 Azlan Fast Food &amp; BBQ Point
+              <p style="margin: 0 0 12px; font-size: 12px; color: #6b7280; line-height: 1.5;">
+                Main Khokhrapar no. 2.5, Malir, Karachi<br />
+                Operating Hours: 7:00 PM – 3:00 AM Daily
               </p>
               <p style="margin: 0; font-size: 11px; color: #9ca3af;">
-                Khokhrapar, Sabir Colony, Malir, Karachi &bull; Order ID: ${orderId}
+                Order ID: ${orderId} &bull; If you have any questions, call us at ${supportPhone}
               </p>
             </td>
           </tr>

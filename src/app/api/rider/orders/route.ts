@@ -56,13 +56,15 @@ export async function GET() {
       });
     }
 
-    // 2. Fetch ONLY orders explicitly assigned to this rider
+    // 2. Fetch ONLY orders explicitly assigned to this rider.
+    // 100 rather than 50 so a very busy day cannot truncate the rider's
+    // today-only cash tally in the "Aaj Ka Kaam" section.
     const { data: orders, error: ordersErr } = await admin
       .from("orders")
       .select("*")
       .or(`rider_id.eq.${rider.id},rider_id.eq.${rider.user_id}`)
       .order("placed_at", { ascending: false })
-      .limit(50);
+      .limit(100);
 
     if (ordersErr) {
       console.error("Error fetching rider orders:", ordersErr);

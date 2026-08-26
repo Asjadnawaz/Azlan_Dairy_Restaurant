@@ -4,12 +4,73 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { cookies } from "next/headers";
 import { isAdminUser } from "@/lib/admin";
 import { syncUserProfile } from "@/lib/auth-role";
-import { Resend } from "resend";
-import { generateDeliveryReceiptEmail } from "@/lib/email/delivery-receipt";
+import { generateDeliveryReceiptEmail, generateOrderCancellationEmail, sendEmail } from "@/lib/email";
 import type { OrderItem } from "@/lib/supabase/database.types";
 
+/**
+ * Robust helper to resolve customer email address from order details,
+ * attached profile, auth user, or order note.
+ */
+async function resolveCustomerEmail(
+  admin: ReturnType<typeof createAdminClient>,
+  order: { user_id?: string | null; customer_phone?: string | null; customer_note?: string | null },
+  directEmail?: string | null
+): Promise<string | undefined> {
+  if (directEmail && directEmail.includes("@")) {
+    return directEmail.trim();
+  }
+
+  // 1. Check order note for [Email: ...] or regex email match
+  if (order.customer_note) {
+    const emailTagMatch = order.customer_note.match(/\[(?:Email|EMAIL):\s*([^\]]+)\]/i);
+    if (emailTagMatch && emailTagMatch[1].includes("@")) {
+      return emailTagMatch[1].trim();
+    }
+    const generalEmailMatch = order.customer_note.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+    if (generalEmailMatch) {
+      return generalEmailMatch[0].trim();
+    }
+  }
+
+  // 2. Direct user_id via Supabase Auth
+  if (order.user_id) {
+    try {
+      const { data: userData } = await admin.auth.admin.getUserById(order.user_id);
+      if (userData?.user?.email) return userData.user.email;
+    } catch {
+      // ignore
+    }
+  }
+
+  // 3. Match customer phone in profiles
+  if (order.customer_phone) {
+    try {
+      const cleanPhone = order.customer_phone.replace(/\D/g, "");
+      if (cleanPhone) {
+        const { data: profiles } = await admin
+          .from("profiles")
+          .select("id, phone")
+          .limit(20);
+
+        const matchedProfile = profiles?.find(
+          (p) => p.phone && p.phone.replace(/\D/g, "") === cleanPhone
+        );
+
+        if (matchedProfile?.id) {
+          const { data: uData } = await admin.auth.admin.getUserById(matchedProfile.id);
+          if (uData?.user?.email) return uData.user.email;
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  return undefined;
+}
+
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -21,10 +82,12 @@ export async function GET(
       *,
       order_items (
         id,
+        item_id,
         name_snapshot,
         price_snapshot,
         quantity,
-        line_total
+        line_total,
+        sort_order
       )
     `);
 
@@ -34,6 +97,22 @@ export async function GET(
 
     if (error || !order) {
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
+    }
+
+    // Order numbers are sequential, so `AD-1041` is guessable, and this response
+    // carries a name, a phone number and an address. A uuid is unguessable and
+    // stays open (that is what the tracking page polls); an order-number lookup
+    // has to bring the last four digits of the phone on the order, the same gate
+    // the page itself uses.
+    if (!isUuid) {
+      const supplied = (new URL(req.url).searchParams.get("p") ?? "").replace(/\D/g, "");
+      const expected = (order.customer_phone ?? "").replace(/\D/g, "").slice(-4);
+      if (!expected || supplied.slice(-4) !== expected) {
+        return NextResponse.json(
+          { error: "Verification required" },
+          { status: 403 }
+        );
+      }
     }
 
     return NextResponse.json({ success: true, order });
@@ -50,13 +129,20 @@ export async function PATCH(
   try {
     const { id } = await params;
     const body = await req.json();
-    const { status, rider_id, rider_note } = body as {
+    const { status, rider_id, rider_note, cancellation_reason, customer_email } = body as {
       status?: string;
       rider_id?: string | null;
       rider_note?: string | null;
+      cancellation_reason?: string | null;
+      customer_email?: string | null;
     };
 
-    if (!status && rider_id === undefined && rider_note === undefined) {
+    if (
+      !status &&
+      rider_id === undefined &&
+      rider_note === undefined &&
+      cancellation_reason === undefined
+    ) {
       return NextResponse.json(
         { error: "Missing fields to update" },
         { status: 400 }
@@ -113,6 +199,10 @@ export async function PATCH(
       updated_at: new Date().toISOString(),
     };
 
+    if (cancellation_reason !== undefined) {
+      updateData.cancellation_reason = cancellation_reason;
+    }
+
     if (status) {
       // Map frontend values to postgres enum values
       let finalStatus = status;
@@ -126,7 +216,10 @@ export async function PATCH(
       if (finalStatus === "picked_up") updateData.picked_up_at = new Date().toISOString();
       if (finalStatus === "delivering") updateData.delivering_at = new Date().toISOString();
       if (finalStatus === "delivered" || finalStatus === "completed") updateData.completed_at = new Date().toISOString();
-      if (finalStatus === "cancelled") updateData.cancelled_at = new Date().toISOString();
+      if (finalStatus === "cancelled") {
+        updateData.cancelled_at = new Date().toISOString();
+        if (cancellation_reason) updateData.cancellation_reason = cancellation_reason;
+      }
     }
 
     // Lookup current logged in rider profile if user is authenticated
@@ -196,49 +289,72 @@ export async function PATCH(
     }
 
     // Trigger Delivery Receipt Email if status reached 'delivered' or 'completed'
-    if ((status === "delivered" || status === "completed") && process.env.RESEND_API_KEY) {
-      try {
-        let customerEmail: string | undefined;
-        if (order.user_id) {
-          const { data: userData } = await admin.auth.admin.getUserById(order.user_id);
-          customerEmail = userData?.user?.email;
-        }
+    if (status === "delivered" || status === "completed") {
+      void (async () => {
+        try {
+          const customerEmail = await resolveCustomerEmail(admin, order, customer_email);
 
-        if (customerEmail) {
-          const { data: items } = await admin
-            .from("order_items")
-            .select("*")
-            .eq("order_id", order.id);
+          if (customerEmail) {
+            const { data: items } = await admin
+              .from("order_items")
+              .select("*")
+              .eq("order_id", order.id);
 
-          const resend = new Resend(process.env.RESEND_API_KEY);
-          const emailHtml = generateDeliveryReceiptEmail({
-            customerName: order.customer_name,
-            orderNumber: order.order_number,
-            orderId: order.id,
-            items: (items as OrderItem[]) || [],
-            subtotal: order.subtotal,
-            deliveryFee: order.delivery_fee,
-            total: order.total,
-            deliveryAddress: order.customer_address,
-            customerPhone: order.customer_phone,
-          });
+            const emailHtml = generateDeliveryReceiptEmail({
+              customerName: order.customer_name,
+              orderNumber: order.order_number,
+              orderId: order.id,
+              items: (items as OrderItem[]) || [],
+              subtotal: order.subtotal,
+              deliveryFee: order.delivery_fee,
+              total: order.total,
+              deliveryAddress: order.customer_address,
+              customerPhone: order.customer_phone,
+            });
 
-          resend.emails
-            .send({
-              from: "Azlan Fast Food <onboarding@resend.dev>",
+            await sendEmail({
               to: customerEmail,
-              subject: `🎉 Order Delivered: ${order.order_number} – Azlan Fast Food`,
+              subject: `Order Delivered: ${order.order_number} – Azlan Fast Food`,
               html: emailHtml,
-            })
-            .then(({ error: resendErr }) => {
-              if (resendErr) console.error("Delivery receipt email error:", resendErr);
-              else console.log(`📧 Delivery receipt email sent to ${customerEmail}`);
-            })
-            .catch((err) => console.error("Delivery receipt email exception:", err));
+            });
+          }
+        } catch (emailErr) {
+          console.warn("Could not send delivery email:", emailErr);
         }
-      } catch (emailErr) {
-        console.warn("Could not send delivery email:", emailErr);
-      }
+      })();
+    }
+
+    // Trigger Order Cancellation Email if status is 'cancelled'
+    if (status === "cancelled") {
+      void (async () => {
+        try {
+          const customerEmail = await resolveCustomerEmail(admin, order, customer_email);
+
+          if (customerEmail) {
+            const { data: items } = await admin
+              .from("order_items")
+              .select("*")
+              .eq("order_id", order.id);
+
+            const emailHtml = generateOrderCancellationEmail({
+              customerName: order.customer_name,
+              orderNumber: order.order_number,
+              orderId: order.id,
+              cancellationReason: order.cancellation_reason || cancellation_reason || null,
+              items: (items as OrderItem[]) || [],
+              total: order.total,
+            });
+
+            await sendEmail({
+              to: customerEmail,
+              subject: `Order Cancelled: ${order.order_number} – Azlan Fast Food`,
+              html: emailHtml,
+            });
+          }
+        } catch (emailErr) {
+          console.warn("Could not send cancellation email:", emailErr);
+        }
+      })();
     }
 
     return NextResponse.json({

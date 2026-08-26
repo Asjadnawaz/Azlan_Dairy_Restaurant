@@ -134,14 +134,30 @@ export type Review = {
 
 export type Settings = {
   id: number;
+  /**
+   * Legacy kill-switch, kept in sync with `open_mode` (false ⇔ force_closed) so
+   * older reads keep working. New code should use `open_mode`.
+   */
   is_active: boolean;
   store_name: string;
   whatsapp_number: string;
   phone: string;
   address: string;
+  /** Display string only — derived from open_hour/close_hour, never authored. */
   hours: string;
   email: string;
   min_order_value: number;
   delivery_fee: number;
   updated_at?: string;
+  /**
+   * Opening control. Added by supabase/migrations/20260825_customer_flow.sql —
+   * optional here so the app keeps running against a database where that
+   * migration has not been applied yet.
+   */
+  open_mode?: "auto" | "force_open" | "force_closed" | null;
+  /** When an out-of-hours force-open lapses; see src/lib/store-hours.ts. */
+  force_open_until?: string | null;
+  /** Schedule, PKT hours (0–23). Defaults 19 → 4. */
+  open_hour?: number | null;
+  close_hour?: number | null;
 };

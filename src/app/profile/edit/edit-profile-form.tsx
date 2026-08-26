@@ -22,7 +22,7 @@ export function EditProfileForm({ initialUser }: { initialUser: User }) {
 
   const [firstName, setFirstName] = useState(initialUser.user_metadata?.first_name || initialFirstName);
   const [lastName, setLastName] = useState(initialUser.user_metadata?.last_name || initialLastName);
-  const [email, setEmail] = useState(initialUser.email || "");
+  const [email] = useState(initialUser.email || "");
   const [phone, setPhone] = useState(initialUser.user_metadata?.phone || "03");
 
   const handleSave = async (e: React.FormEvent) => {
