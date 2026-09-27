@@ -3,7 +3,7 @@
 /**
  * The admin shell: sidebar, top bar, and the section router.
  *
- * Sections switch on `location.hash`, so `/admin/orders` stays the only admin
+ * Sections switch on `location.hash`, so `/admin/dashboard` stays the only admin
  * route. That keeps the five existing links to it working untouched, makes
  * switching instant with no server round-trip, and — the reason that matters —
  * never tears down the realtime channel, so a new order still lands the moment

@@ -264,7 +264,7 @@ export function Header() {
                   <div className="py-1.5">
                     {isAdminUser(user) && (
                       <Link
-                        href="/admin/orders"
+                        href="/admin/dashboard"
                         className="flex items-center gap-3 px-4 py-2.5 text-sm font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 transition-colors"
                       >
                         <span className="material-symbols-outlined text-[20px] text-[var(--color-primary)]">
@@ -452,7 +452,7 @@ export function Header() {
                   </div>
                   {isAdminUser(user) && (
                     <Link
-                      href="/admin/orders"
+                      href="/admin/dashboard"
                       onClick={() => setMobileOpen(false)}
                       className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold text-emerald-900 bg-emerald-50 border border-emerald-200 transition-colors"
                     >

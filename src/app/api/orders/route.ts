@@ -190,11 +190,14 @@ export async function POST(req: NextRequest) {
     const storeStatus = getStoreOpenStatus(settings ?? null);
     if (!storeStatus.isOpen) {
       const errorMsg =
-        storeStatus.reason === "closed_by_admin"
-          ? "We have paused online orders for now. Please check back shortly."
-          : `We are closed right now — we open in ${formatCountdown(
-              storeStatus.minutesUntilOpen
-            )}. Delivery hours are ${storeStatus.operatingHoursText}.`;
+        storeStatus.reason === "temporary_closure"
+          ? (storeStatus.temporaryClosureMessage ??
+              "Store is temporarily closed for maintenance shutdown. Online orders will resume on October 12.")
+          : storeStatus.reason === "closed_by_admin"
+            ? "We have paused online orders for now. Please check back shortly."
+            : `We are closed right now — we open in ${formatCountdown(
+                storeStatus.minutesUntilOpen
+              )}. Delivery hours are ${storeStatus.operatingHoursText}.`;
       return NextResponse.json({ error: errorMsg }, { status: 403 });
     }
 

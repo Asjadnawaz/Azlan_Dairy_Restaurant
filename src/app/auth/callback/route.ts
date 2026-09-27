@@ -29,7 +29,7 @@ export async function GET(request: Request) {
       const role = await syncUserProfile(data.user);
 
       if (role === "admin") {
-        return safeRedirect("/admin/orders", request.url);
+        return safeRedirect("/admin/dashboard", request.url);
       }
       if (role === "rider") {
         return safeRedirect("/rider", request.url);

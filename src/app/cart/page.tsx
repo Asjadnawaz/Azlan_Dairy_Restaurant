@@ -327,9 +327,11 @@ export default function CartPage() {
     }
     if (!isStoreOpen) {
       toast.error(
-        store.isWithinHours
-          ? "We have paused online orders for now. Please check back shortly."
-          : `We are closed right now — we open in ${formatCountdown(store.minutesUntilOpen)}.`
+        store.reason === "temporary_closure"
+          ? (store.temporaryClosureMessage ?? "Temporarily closed for maintenance shutdown. Online orders will resume on October 12.")
+          : store.isWithinHours
+            ? "We have paused online orders for now. Please check back shortly."
+            : `We are closed right now — we open in ${formatCountdown(store.minutesUntilOpen)}.`
       );
       return;
     }
@@ -454,13 +456,23 @@ export default function CartPage() {
 
         {!isStoreOpen && !isEmpty && (
           <div className="mb-5 flex items-start gap-2.5 rounded-2xl border border-amber-200 bg-amber-50 p-3.5 text-xs font-semibold text-amber-900">
-            <span className="material-symbols-outlined mt-0.5 shrink-0 text-[18px]">schedule</span>
+            <span className="material-symbols-outlined mt-0.5 shrink-0 text-[18px]">
+              {store.reason === "temporary_closure" ? "construction" : "schedule"}
+            </span>
             <p className="leading-snug">
-              We&apos;re closed right now
-              {store.isWithinHours
-                ? " — online orders are paused."
-                : `. We open in ${formatCountdown(store.minutesUntilOpen)} (${store.operatingHoursText}).`}{" "}
-              Build your cart now and it will be waiting for you.
+              {store.reason === "temporary_closure" ? (
+                <>
+                  <strong className="font-black">Maintenance Shutdown:</strong> Store is closed for 15 days. Online orders will resume on October 12. Build your cart now and it will be waiting for you.
+                </>
+              ) : (
+                <>
+                  We&apos;re closed right now
+                  {store.isWithinHours
+                    ? " — online orders are paused."
+                    : `. We open in ${formatCountdown(store.minutesUntilOpen)} (${store.operatingHoursText}).`}{" "}
+                  Build your cart now and it will be waiting for you.
+                </>
+              )}
             </p>
           </div>
         )}

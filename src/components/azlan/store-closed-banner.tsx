@@ -17,19 +17,37 @@ export function StoreClosedBanner() {
 
   if (status.isOpen) return null;
 
+  const isMaintenance = status.reason === "temporary_closure";
   const closedByAdmin = status.mode === "force_closed";
   const countdown = formatCountdown(status.minutesUntilOpen);
 
   return (
     <aside
       aria-label="Restaurant closed notice"
-      className="relative z-[150] w-full border-b border-amber-300 bg-amber-50 text-amber-950"
+      className={`relative z-[150] w-full border-b ${
+        isMaintenance
+          ? "border-amber-400 bg-amber-100/90 text-amber-950"
+          : "border-amber-300 bg-amber-50 text-amber-950"
+      }`}
     >
       <div className="mx-auto flex max-w-7xl items-center gap-2 px-4 py-2 text-xs sm:gap-3 sm:py-2.5 sm:text-sm">
+        {isMaintenance && (
+          <span className="material-symbols-outlined text-amber-700 text-[18px] shrink-0">
+            construction
+          </span>
+        )}
         {/* One line, always. The long form only appears where there is room. */}
         <p className="min-w-0 flex-1 truncate font-bold">
-          <span className="font-black">Closed right now</span>
-          {closedByAdmin ? (
+          <span className="font-black">
+            {isMaintenance ? "Maintenance Shutdown" : "Closed right now"}
+          </span>
+          {isMaintenance ? (
+            <span className="font-semibold text-amber-900">
+              {" · "}
+              {status.temporaryClosureMessage ||
+                "Store is closed for 15 days. Online orders will resume on October 12."}
+            </span>
+          ) : closedByAdmin ? (
             <span className="font-semibold text-amber-800">
               {" · "}Online orders are paused
               <span className="hidden sm:inline"> — please check back shortly</span>

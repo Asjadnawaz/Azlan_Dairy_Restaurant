@@ -76,9 +76,11 @@ export function Hero({ settings }: { settings: Settings | null }) {
               <span className="truncate">
                 {isOpen
                   ? "Open now — delivering in Malir"
-                  : status.mode === "force_closed"
-                    ? "Orders paused — back shortly"
-                    : `Closed — opens in ${formatCountdown(status.minutesUntilOpen)}`}
+                  : status.reason === "temporary_closure"
+                    ? "Maintenance Shutdown — reopening Oct 12"
+                    : status.mode === "force_closed"
+                      ? "Orders paused — back shortly"
+                      : `Closed — opens in ${formatCountdown(status.minutesUntilOpen)}`}
               </span>
             </div>
 

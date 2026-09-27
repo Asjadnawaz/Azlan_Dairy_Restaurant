@@ -1,5 +1,5 @@
 /**
- * Route skeleton for /admin/orders.
+ * Route skeleton for /admin/dashboard.
  *
  * Mirrors the shell's frame — dark rail, top bar, KPI row — so the layout does not
  * jump when the real dashboard swaps in.

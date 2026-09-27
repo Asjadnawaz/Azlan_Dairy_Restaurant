@@ -15,7 +15,7 @@ function safeRedirect(target: string, requestUrl: string) {
  * 1. Refreshes the Supabase auth session on every request (handles token expiry).
  * 2. Syncs authenticated user to `public.profiles` database table.
  * 3. Enforces strict role-based access control (RBAC):
- *    - Admin accessing /rider -> redirected to /admin/orders
+ *    - Admin accessing /rider -> redirected to /admin/dashboard
  *    - Rider accessing /admin -> redirected to /rider
  *    - Customer accessing /admin or /rider -> redirected to /
  *    - Unauthenticated -> /rider shows its own login screen, everything else to /
@@ -84,9 +84,9 @@ export async function proxy(request: NextRequest) {
   const role = await syncUserProfile(user);
 
   // Protected Route Redirection Rules:
-  // 1. Admin accessing /rider -> Redirect to /admin/orders
+  // 1. Admin accessing /rider -> Redirect to /admin/dashboard
   if (isRiderRoute && role === "admin") {
-    return safeRedirect("/admin/orders", request.url);
+    return safeRedirect("/admin/dashboard", request.url);
   }
 
   // 2. Rider accessing /admin -> Redirect to /rider

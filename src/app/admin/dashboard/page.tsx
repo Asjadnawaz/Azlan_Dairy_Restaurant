@@ -9,7 +9,7 @@ import type { Order, OrderItem, Rider, Settings } from "@/lib/supabase/database.
 
 export const dynamic = "force-dynamic";
 
-export default async function AdminOrdersPage() {
+export default async function AdminDashboardPage() {
   const supabase = await createServerClient();
 
   const {

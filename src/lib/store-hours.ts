@@ -42,6 +42,15 @@ export const DEFAULT_CLOSE_HOUR = 4;
 /** How long a force-open survives without a heartbeat. */
 export const FORCE_OPEN_GRACE_MS = 30 * 60 * 1000;
 
+/** Temporary maintenance shutdown configuration (15 days). */
+export const TEMPORARY_MAINTENANCE = {
+  active: true,
+  // 15 days from Sep 27, 2026 until Oct 12, 2026 19:00 PKT
+  until: "2026-10-12T19:00:00+05:00",
+  title: "Maintenance Shutdown",
+  message: "We are temporarily closed for a 15-day maintenance shutdown. Online orders will resume on October 12.",
+};
+
 export interface StoreStatusResult {
   isOpen: boolean;
   /** Would the schedule alone have the shop open right now? */
@@ -62,7 +71,8 @@ export interface StoreStatusResult {
   currentTimePkt: string;
   /** Minutes until the schedule next opens; 0 when already within hours. */
   minutesUntilOpen: number;
-  reason?: "closed_by_admin" | "closed_off_hours";
+  reason?: "closed_by_admin" | "closed_off_hours" | "temporary_closure";
+  temporaryClosureMessage?: string;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -201,6 +211,22 @@ export function getStoreOpenStatus(
     minutesUntilOpen: minutesUntilOpen(date, openHour, closeHour),
   };
 
+  const isMaintenanceActive =
+    TEMPORARY_MAINTENANCE.active &&
+    date.getTime() < new Date(TEMPORARY_MAINTENANCE.until).getTime();
+
+  if (isMaintenanceActive) {
+    return {
+      ...base,
+      isOpen: false,
+      forceOpenActive: false,
+      forceOpenExpiresInMs: null,
+      forceOpenLapsed: false,
+      reason: "temporary_closure",
+      temporaryClosureMessage: TEMPORARY_MAINTENANCE.message,
+    };
+  }
+
   // Does a force-open still have grace left? A null expiry means the admin
   // opened the shop but no heartbeat has landed yet — honour it rather than
   // slamming the door on them.
@@ -267,6 +293,8 @@ export type StoreStatusPayload = {
   currentTimePkt: string;
   minutesUntilOpen: number;
   forceOpenExpiresInMs: number | null;
+  reason?: "closed_by_admin" | "closed_off_hours" | "temporary_closure";
+  temporaryClosureMessage?: string;
 };
 
 export function toStoreStatusPayload(status: StoreStatusResult): StoreStatusPayload {
@@ -278,5 +306,7 @@ export function toStoreStatusPayload(status: StoreStatusResult): StoreStatusPayl
     currentTimePkt: status.currentTimePkt,
     minutesUntilOpen: status.minutesUntilOpen,
     forceOpenExpiresInMs: status.forceOpenExpiresInMs,
+    reason: status.reason,
+    temporaryClosureMessage: status.temporaryClosureMessage,
   };
 }

@@ -101,7 +101,7 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalProps) {
           if (userRole === "admin" || isAdminUser(data.user)) {
             toast.success("Welcome back, Admin!");
             onClose();
-            router.push("/admin/orders");
+            router.push("/admin/dashboard");
             router.refresh();
             return;
           } else if (userRole === "rider") {
