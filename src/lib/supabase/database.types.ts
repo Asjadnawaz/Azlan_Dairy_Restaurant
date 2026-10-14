@@ -7,6 +7,7 @@ export type ItemCategory =
   | "Signature"
   | "Broast"
   | "Burgers"
+  | "Pizza"
   | "Rolls & Wraps"
   | "BBQ"
   | "Sides"
