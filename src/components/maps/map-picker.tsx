@@ -5,7 +5,7 @@ import { MapContainer, TileLayer, Marker, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
-// Azlan Fast Food and B B Q point coordinates (Malir, Karachi)
+// Azlan Fast Food and BBQ Point coordinates (Malir, Karachi)
 const RESTAURANT_LOCATION = {
   lat: 24.9080912,
   lng: 67.2124054,

@@ -73,13 +73,13 @@ export function Footer({ settings }: { settings: Settings | null }) {
             <div className="flex items-center gap-2.5">
               <Image
                 src="/images/logo.png"
-                alt="Azlan Fast Food and B B Q point logo"
+                alt="Azlan Fast Food and BBQ point logo"
                 width={40}
                 height={40}
                 className="h-10 w-10 rounded-full object-cover ring-2 ring-white/20"
               />
               <h3 className="text-xl font-extrabold leading-tight">
-                Azlan Fast Food and B B Q point
+                Azlan Fast Food and BBQ point
               </h3>
             </div>
             <p className="mt-3 text-sm text-white/60 leading-relaxed">
