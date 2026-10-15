@@ -2,33 +2,14 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useCart } from "@/lib/cart-store";
 import type { Order, OrderItem as DatabaseOrderItem } from "@/lib/supabase/database.types";
+import { readLocalOrders, type StoredOrder } from "@/lib/reviews-local";
+import { printInvoice } from "@/lib/invoice-print";
+import { OrderHistoryCard } from "@/components/orders/order-history-card";
+import { InvoiceModal } from "@/components/orders/invoice-modal";
 import { toast } from "sonner";
-
-interface OrderItem {
-  id: string;
-  name: string;
-  price: number;
-  quantity: number;
-  image_path?: string | null;
-}
-
-interface StoredOrder {
-  orderNumber: string;
-  phone: string;
-  total: number;
-  timestamp: number;
-  items?: OrderItem[];
-  status?: string;
-  id?: string;
-  customer_name?: string;
-  customer_address?: string;
-  subtotal?: number;
-  delivery_fee?: number;
-}
 
 type DatabaseOrderWithItems = Order & {
   order_items:
@@ -38,15 +19,6 @@ type DatabaseOrderWithItems = Order & {
       >[]
     | null;
 };
-
-/** Item names come from the database and go into a printed HTML document. */
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
 
 export default function OrdersPage() {
   const cart = useCart();
@@ -60,13 +32,7 @@ export default function OrdersPage() {
       setLoading(true);
 
       // 1. Load local storage orders
-      let localOrders: StoredOrder[] = [];
-      try {
-        const stored = localStorage.getItem("azlan-orders");
-        if (stored) localOrders = JSON.parse(stored);
-      } catch {
-        localOrders = [];
-      }
+      const localOrders = readLocalOrders();
 
       // 2. Query /api/orders for latest order data & statuses
       try {
@@ -83,13 +49,15 @@ export default function OrdersPage() {
 
           if (dbOrders && dbOrders.length > 0) {
             const merged: StoredOrder[] = dbOrders.map((o) => {
-              const items: OrderItem[] = (o.order_items || []).map((item) => ({
-                id: item.item_id || item.id,
-                name: item.name_snapshot,
-                price: item.price_snapshot,
-                quantity: item.quantity,
-                image_path: null,
-              }));
+              const items: NonNullable<StoredOrder["items"]> = (o.order_items || []).map(
+                (item) => ({
+                  id: item.item_id || item.id,
+                  name: item.name_snapshot,
+                  price: item.price_snapshot,
+                  quantity: item.quantity,
+                  image_path: null,
+                })
+              );
 
               // Match local storage to preserve image previews if available
               const localMatch = localOrders.find(
@@ -148,7 +116,7 @@ export default function OrdersPage() {
           id: item.id || item.name,
           name: item.name,
           price: item.price,
-          image_path: item.image_path || "/images/placeholder.jpg",
+          image_path: item.image_path ?? "",
         },
         item.quantity
       );
@@ -156,12 +124,6 @@ export default function OrdersPage() {
 
     toast.success(`Items from Order #${order.orderNumber} added to cart!`);
     router.push("/cart");
-  };
-
-  const isCompleted = (status?: string) => {
-    if (!status) return false;
-    const s = status.toLowerCase();
-    return s === "completed" || s === "complete" || s === "delivered";
   };
 
   /**
@@ -178,112 +140,11 @@ export default function OrdersPage() {
       : `/orders/${order.orderNumber}`;
   };
 
-  const getStatusBadge = (status?: string) => {
-    const s = (status || "pending").toLowerCase();
-    if (s === "completed" || s === "complete" || s === "delivered") {
-      return (
-        <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200">
-          <span className="material-symbols-outlined text-[14px]">check_circle</span>
-          Complete
-        </span>
-      );
-    }
-    if (s === "cancelled") {
-      return (
-        <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-extrabold bg-rose-100 text-rose-800 border border-rose-200">
-          <span className="material-symbols-outlined text-[14px]">cancel</span>
-          Cancelled
-        </span>
-      );
-    }
-    return (
-      <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-extrabold bg-amber-100 text-amber-800 border border-amber-200">
-        <span className="material-symbols-outlined text-[14px]">timelapse</span>
-        In Progress
-      </span>
-    );
-  };
-
   const displayOrders = orders.slice(0, 10);
-
-  /**
-   * Print one invoice.
-   *
-   * `window.print()` cannot be used here: the site's global `@media print` block
-   * (globals.css) hides every top-level node except `#thermal-receipt-print-portal`
-   * so the 80mm thermal receipt prints cleanly — which means printing this modal
-   * directly yields a blank page. Instead we render the invoice into a hidden
-   * iframe that carries its own stylesheet and print only that document.
-   */
-  const printInvoice = (order: StoredOrder) => {
-    const rows = (order.items || [])
-      .map(
-        (item) =>
-          `<tr><td>${escapeHtml(item.name)}</td><td class="c">${item.quantity}</td><td class="r">Rs. ${item.price}</td><td class="r">Rs. ${item.price * item.quantity}</td></tr>`
-      )
-      .join("");
-
-    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Invoice ${escapeHtml(order.orderNumber)}</title>
-      <style>
-        *{box-sizing:border-box;font-family:Arial,Helvetica,sans-serif}
-        body{margin:0;padding:28px;color:#111}
-        h1{margin:0;font-size:20px;color:#0a3318}
-        .muted{color:#666;font-size:12px}
-        .meta{display:flex;justify-content:space-between;gap:16px;margin:18px 0;font-size:13px}
-        table{width:100%;border-collapse:collapse;margin-top:8px;font-size:13px}
-        th,td{padding:8px 6px;border-bottom:1px solid #e5e5e5;text-align:left}
-        th{background:#f5f5f5;text-transform:uppercase;font-size:11px}
-        .c{text-align:center}.r{text-align:right}
-        .totals{margin-top:14px;font-size:13px}
-        .totals div{display:flex;justify-content:space-between;padding:3px 0}
-        .grand{font-weight:800;font-size:16px;color:#0a3318;border-top:2px solid #0a3318;padding-top:8px;margin-top:6px}
-      </style></head><body>
-      <h1>AZLAN FAST FOOD &amp; BBQ POINT</h1>
-      <p class="muted">Official Invoice</p>
-      <div class="meta">
-        <div><div class="muted">Order</div><b>#${escapeHtml(order.orderNumber)}</b></div>
-        <div><div class="muted">Date</div>${new Date(order.timestamp).toLocaleString("en-PK", { dateStyle: "medium", timeStyle: "short" })}</div>
-        <div><div class="muted">Status</div>PAID / COMPLETE</div>
-      </div>
-      ${order.customer_name ? `<p class="muted">Customer: <b style="color:#111">${escapeHtml(order.customer_name)}</b>${order.phone ? ` · ${escapeHtml(order.phone)}` : ""}</p>` : ""}
-      <table><thead><tr><th>Item</th><th class="c">Qty</th><th class="r">Price</th><th class="r">Total</th></tr></thead><tbody>${rows}</tbody></table>
-      <div class="totals">
-        ${order.subtotal !== undefined ? `<div><span>Subtotal</span><span>Rs. ${order.subtotal}</span></div>` : ""}
-        ${order.delivery_fee ? `<div><span>Delivery</span><span>Rs. ${order.delivery_fee}</span></div>` : ""}
-        <div class="grand"><span>Total Paid</span><span>Rs. ${order.total}</span></div>
-      </div>
-      </body></html>`;
-
-    const frame = document.createElement("iframe");
-    frame.style.position = "fixed";
-    frame.style.right = "0";
-    frame.style.bottom = "0";
-    frame.style.width = "0";
-    frame.style.height = "0";
-    frame.style.border = "0";
-    document.body.appendChild(frame);
-
-    const doc = frame.contentWindow?.document;
-    if (!doc) {
-      document.body.removeChild(frame);
-      return;
-    }
-    doc.open();
-    doc.write(html);
-    doc.close();
-
-    frame.contentWindow?.focus();
-    frame.contentWindow?.print();
-    // Give the print dialog time to grab the document before we drop the frame.
-    window.setTimeout(() => {
-      if (frame.parentNode) frame.parentNode.removeChild(frame);
-    }, 1000);
-  };
 
   return (
     <div className="min-h-screen bg-[var(--color-background)]">
       <div className="mx-auto max-w-3xl px-4 py-10">
-
         {/* Page header */}
         <div className="flex items-center justify-between mb-8">
           <div>
@@ -331,238 +192,26 @@ export default function OrdersPage() {
           </div>
         ) : (
           <div className="space-y-6">
-            {displayOrders.map((order) => {
-              const completed = isCompleted(order.status);
-              return (
-                <div
-                  key={order.orderNumber + order.timestamp}
-                  className="bg-[var(--color-surface-container-lowest)] rounded-2xl border border-[var(--color-surface-variant)] overflow-hidden custom-shadow"
-                >
-                  {/* Order header */}
-                  <div
-                    className="px-5 py-4 flex items-center justify-between gap-4"
-                    style={{
-                      background:
-                        "linear-gradient(135deg, var(--color-primary) 0%, #0a3318 100%)",
-                    }}
-                  >
-                    <div className="flex flex-col gap-0.5">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold uppercase tracking-widest text-[var(--color-mint-accent)]">
-                          Order
-                        </span>
-                        {getStatusBadge(order.status)}
-                      </div>
-                      <span className="text-lg font-extrabold text-white tracking-tight mt-0.5">
-                        #{order.orderNumber}
-                      </span>
-                      <span className="text-xs text-white/60">
-                        {new Date(order.timestamp).toLocaleString("en-PK", {
-                          dateStyle: "medium",
-                          timeStyle: "short",
-                        })}
-                      </span>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-xs text-white/60 font-medium">Total Paid</p>
-                      <p
-                        className="text-2xl font-extrabold"
-                        style={{ color: "var(--color-cta-yellow)" }}
-                      >
-                        Rs. {order.total}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Items list */}
-                  {order.items && order.items.length > 0 ? (
-                    <div className="divide-y divide-[var(--color-surface-variant)]">
-                      {order.items.map((item, idx) => (
-                        <div
-                          key={item.id || idx}
-                          className="flex items-center gap-3 px-5 py-3"
-                        >
-                          <Image
-                            src={item.image_path || "/images/placeholder.jpg"}
-                            alt={item.name}
-                            width={48}
-                            height={48}
-                            className="w-12 h-12 rounded-xl object-cover shrink-0 border border-[var(--color-surface-variant)]"
-                          />
-                          <div className="flex-1 min-w-0">
-                            <p className="font-semibold text-sm text-[var(--color-on-surface)] truncate">
-                              {item.name}
-                            </p>
-                            <p className="text-xs text-[var(--color-on-surface-variant)] mt-0.5">
-                              Rs. {item.price} × {item.quantity}
-                            </p>
-                          </div>
-                          <p className="font-bold text-sm text-[var(--color-primary)] shrink-0">
-                            Rs. {item.price * item.quantity}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="px-5 py-4 text-sm text-[var(--color-on-surface-variant)]">
-                      Item details not available for this order.
-                    </div>
-                  )}
-
-                  {/* Card Actions: Invoice & Reorder if Complete; Track Order if In Progress */}
-                  <div className="px-5 py-4 bg-[var(--color-surface-container-low)] flex items-center justify-end gap-3">
-                    {completed ? (
-                      <>
-                        <button
-                          onClick={() => setSelectedInvoice(order)}
-                          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-[var(--color-surface-container-highest)] text-[var(--color-on-surface)] text-xs font-bold hover:bg-[var(--color-primary)] hover:text-white transition-colors"
-                        >
-                          <span className="material-symbols-outlined text-[16px]">receipt_long</span>
-                          Invoice
-                        </button>
-                        <button
-                          onClick={() => handleReorder(order)}
-                          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-[var(--color-primary)] text-white text-xs font-bold hover:bg-[var(--color-primary-container)] transition-colors custom-shadow"
-                        >
-                          <span className="material-symbols-outlined text-[16px]">refresh</span>
-                          Reorder
-                        </button>
-                      </>
-                    ) : (
-                      <Link
-                        href={trackHref(order)}
-                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-[var(--color-primary)] text-white text-sm font-bold hover:bg-[var(--color-primary-container)] transition-colors custom-shadow"
-                      >
-                        <span className="material-symbols-outlined text-[18px]">map</span>
-                        Track Order
-                      </Link>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+            {displayOrders.map((order) => (
+              <OrderHistoryCard
+                key={(order.orderNumber ?? "") + (order.timestamp ?? 0)}
+                order={order}
+                trackHref={trackHref(order)}
+                onInvoice={() => setSelectedInvoice(order)}
+                onReorder={() => handleReorder(order)}
+              />
+            ))}
           </div>
         )}
       </div>
 
       {/* Invoice Modal */}
       {selectedInvoice && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-[var(--color-surface-container-lowest)] text-[var(--color-on-surface)] rounded-3xl max-w-xl w-full border border-[var(--color-surface-variant)] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-            
-            {/* Invoice Header */}
-            <div className="px-6 py-5 bg-[var(--color-primary)] text-white flex items-center justify-between border-b border-white/10">
-              <div>
-                <p className="text-xs uppercase tracking-widest text-[var(--color-mint-accent)] font-bold">Official Invoice</p>
-                <h2 className="text-xl font-black tracking-tight">AZLAN FAST FOOD & BBQ POINT</h2>
-              </div>
-              <button
-                onClick={() => setSelectedInvoice(null)}
-                className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
-              >
-                <span className="material-symbols-outlined text-white text-[20px]">close</span>
-              </button>
-            </div>
-
-            {/* Invoice Body */}
-            <div className="p-6 overflow-y-auto space-y-6 text-sm">
-              <div className="flex flex-col sm:flex-row justify-between gap-4 pb-4 border-b border-[var(--color-surface-variant)]">
-                <div>
-                  <p className="text-xs text-[var(--color-on-surface-variant)] uppercase font-semibold">Order Number</p>
-                  <p className="text-lg font-bold text-[var(--color-primary)]">#{selectedInvoice.orderNumber}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-[var(--color-on-surface-variant)] uppercase font-semibold">Date & Time</p>
-                  <p className="font-semibold">
-                    {new Date(selectedInvoice.timestamp).toLocaleString("en-PK", {
-                      dateStyle: "medium",
-                      timeStyle: "short",
-                    })}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-[var(--color-on-surface-variant)] uppercase font-semibold">Status</p>
-                  <span className="inline-block mt-0.5 px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                    PAID / COMPLETE
-                  </span>
-                </div>
-              </div>
-
-              {selectedInvoice.customer_name && (
-                <div className="bg-[var(--color-surface-container-low)] p-3.5 rounded-xl space-y-1 border border-[var(--color-surface-variant)]">
-                  <p className="font-bold text-xs uppercase text-[var(--color-on-surface-variant)]">Customer Information</p>
-                  <p className="font-semibold">{selectedInvoice.customer_name}</p>
-                  {selectedInvoice.phone && <p className="text-xs text-[var(--color-on-surface-variant)]">Phone: {selectedInvoice.phone}</p>}
-                  {selectedInvoice.customer_address && <p className="text-xs text-[var(--color-on-surface-variant)]">Address: {selectedInvoice.customer_address}</p>}
-                </div>
-              )}
-
-              {/* Items Table */}
-              <div>
-                <p className="font-bold text-xs uppercase tracking-wider text-[var(--color-on-surface-variant)] mb-2">Item Breakdown</p>
-                <div className="border border-[var(--color-surface-variant)] rounded-xl overflow-hidden">
-                  <table className="w-full text-left">
-                    <thead className="bg-[var(--color-surface-container-low)] text-xs font-bold uppercase border-b border-[var(--color-surface-variant)] text-[var(--color-on-surface-variant)]">
-                      <tr>
-                        <th className="py-2.5 px-3">Item</th>
-                        <th className="py-2.5 px-3 text-center">Qty</th>
-                        <th className="py-2.5 px-3 text-right">Price</th>
-                        <th className="py-2.5 px-3 text-right">Total</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[var(--color-surface-variant)]">
-                      {(selectedInvoice.items || []).map((item, idx) => (
-                        <tr key={idx}>
-                          <td className="py-2.5 px-3 font-medium">{item.name}</td>
-                          <td className="py-2.5 px-3 text-center text-xs font-bold">{item.quantity}</td>
-                          <td className="py-2.5 px-3 text-right text-xs">Rs. {item.price}</td>
-                          <td className="py-2.5 px-3 text-right font-bold text-xs">Rs. {item.price * item.quantity}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* Summary */}
-              <div className="border-t border-[var(--color-surface-variant)] pt-3 space-y-1.5 text-xs">
-                {selectedInvoice.subtotal !== undefined && (
-                  <div className="flex justify-between text-[var(--color-on-surface-variant)]">
-                    <span>Subtotal</span>
-                    <span className="font-medium text-[var(--color-on-surface)]">Rs. {selectedInvoice.subtotal}</span>
-                  </div>
-                )}
-                {selectedInvoice.delivery_fee !== undefined && selectedInvoice.delivery_fee > 0 && (
-                  <div className="flex justify-between text-[var(--color-on-surface-variant)]">
-                    <span>Delivery Fee</span>
-                    <span className="font-medium text-[var(--color-on-surface)]">Rs. {selectedInvoice.delivery_fee}</span>
-                  </div>
-                )}
-                <div className="flex justify-between font-extrabold text-base pt-2 border-t border-[var(--color-surface-variant)] text-[var(--color-primary)]">
-                  <span>Total Amount Paid</span>
-                  <span style={{ color: "var(--color-cta-yellow)" }}>Rs. {selectedInvoice.total}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Footer Buttons */}
-            <div className="p-4 bg-[var(--color-surface-container-low)] border-t border-[var(--color-surface-variant)] flex items-center justify-end gap-3">
-              <button
-                onClick={() => printInvoice(selectedInvoice)}
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-[var(--color-primary)] text-white text-xs font-bold hover:bg-[var(--color-primary-container)] transition-colors custom-shadow"
-              >
-                <span className="material-symbols-outlined text-[16px]">print</span>
-                Print Invoice
-              </button>
-              <button
-                onClick={() => setSelectedInvoice(null)}
-                className="px-5 py-2.5 rounded-full bg-[var(--color-surface-container-highest)] text-[var(--color-on-surface)] text-xs font-bold hover:bg-[var(--color-surface-variant)] transition-colors"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
+        <InvoiceModal
+          order={selectedInvoice}
+          onClose={() => setSelectedInvoice(null)}
+          onPrint={() => printInvoice(selectedInvoice)}
+        />
       )}
     </div>
   );

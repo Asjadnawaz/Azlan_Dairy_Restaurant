@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdminUser } from "@/lib/admin";
-import { MENU_ITEMS } from "@/data/menu-data";
+import { MENU_ITEMS } from "@/data/menu";
 import { revalidateMenu } from "@/lib/menu.server";
 import { getErrorMessage } from "@/lib/utils";
 
@@ -50,8 +50,8 @@ export async function GET() {
         .order("sort_order", { ascending: true });
 
       if (seedError) {
-        console.error("Failed seeding items:", seedError);
-        return NextResponse.json({ error: seedError.message }, { status: 500 });
+        console.error("Failed seeding items:", seedError.message);
+        return NextResponse.json({ error: "Failed to initialize menu items" }, { status: 500 });
       }
       revalidateMenu();
       return NextResponse.json({ items: seeded });

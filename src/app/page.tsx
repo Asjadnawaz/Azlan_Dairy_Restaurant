@@ -1,14 +1,18 @@
 import { getSettings } from "@/lib/settings.server";
 import { getMenuItems } from "@/lib/menu.server";
-import { Hero } from "@/components/azlan/hero";
-import { TrustSection } from "@/components/azlan/trust-section";
-import { MenuSection } from "@/components/azlan/menu-section";
-import { TestimonialsSection } from "@/components/azlan/testimonials-section";
-import { AboutSection } from "@/components/azlan/about-section";
-import { Footer } from "@/components/azlan/footer";
+import { Hero } from "@/components/home/hero";
+import { TrustSection } from "@/components/home/trust-section";
+import { MenuSection } from "@/components/home/menu-section";
+import { TestimonialsSection } from "@/components/home/testimonials-section";
+import { AboutSection } from "@/components/home/about-section";
+import { Footer } from "@/components/layout/footer";
 import { getPublicReviews } from "@/lib/reviews.server";
 
-export const dynamic = "force-dynamic";
+// Every read below is cached and cookie-free (see lib/settings.server.ts), so
+// the page can be prerendered instead of rebuilt per request. Live changes
+// still reach an open tab through the `items` and `settings` realtime
+// channels; server HTML may lag by at most this many seconds.
+export const revalidate = 60;
 
 export default async function Home() {
   // All three reads are cached and cookie-free, so this page can be prerendered

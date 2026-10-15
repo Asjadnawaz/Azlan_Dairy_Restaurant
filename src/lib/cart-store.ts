@@ -8,7 +8,7 @@ import { persist, createJSONStorage } from "zustand/middleware";
  * fields were removed along with `cart-drawer.tsx`: no drawer has been mounted
  * for a long time, so nothing read them, and `add()` setting `isOpen: true` did
  * nothing at all. Adding to the cart now surfaces the floating cart button
- * instead (src/components/azlan/floating-buttons.tsx).
+ * instead (src/components/layout/floating-buttons.tsx).
  */
 
 export type CartItem = {

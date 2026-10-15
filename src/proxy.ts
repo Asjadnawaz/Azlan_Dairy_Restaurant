@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextRequest, NextResponse } from "next/server";
 import { syncUserProfile } from "@/lib/auth-role";
+import { hasSupabaseEnv, SUPABASE_ANON_KEY, SUPABASE_URL } from "@/lib/supabase/env";
 
 function safeRedirect(target: string, requestUrl: string) {
   const url = new URL(target, requestUrl);
@@ -26,8 +27,8 @@ export async function proxy(request: NextRequest) {
   });
 
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    SUPABASE_URL,
+    SUPABASE_ANON_KEY,
     {
       cookies: {
         getAll() {
@@ -50,6 +51,10 @@ export async function proxy(request: NextRequest) {
       },
     }
   );
+
+  // Without a configured project there is no session to refresh; the pages
+  // behind these routes do their own auth checks.
+  if (!hasSupabaseEnv()) return response;
 
   // Refresh session tokens & fetch current authenticated user
   const {

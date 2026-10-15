@@ -38,9 +38,10 @@ export async function syncUserProfile(user: {
     } else if (existingProfile?.role) {
       targetRole = existingProfile.role as UserRole;
     } else {
-      const metaRole = (user.user_metadata?.role || user.app_metadata?.role) as string | undefined;
-      if (metaRole === "admin" || metaRole === "rider") {
-        targetRole = metaRole;
+      // Only server-managed app_metadata can designate role on initial sync (user_metadata is client-writable)
+      const appRole = user.app_metadata?.role as string | undefined;
+      if (appRole === "admin" || appRole === "rider") {
+        targetRole = appRole;
       }
     }
 

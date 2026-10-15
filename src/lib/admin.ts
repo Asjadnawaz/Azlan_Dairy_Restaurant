@@ -9,11 +9,8 @@ export function isAdminUser(
 
   const emailLower = user.email.toLowerCase();
 
-  // 1. Check user metadata / app metadata for role === "admin"
-  if (
-    user.app_metadata?.role === "admin" ||
-    user.user_metadata?.role === "admin"
-  ) {
+  // 1. Check server-assigned app_metadata for role === "admin" (never trust client-writable user_metadata)
+  if (user.app_metadata?.role === "admin") {
     return true;
   }
 

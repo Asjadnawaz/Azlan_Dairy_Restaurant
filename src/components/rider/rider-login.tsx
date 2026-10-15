@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { createBrowserClient } from "@/lib/supabase/client";
 import { RIDER_TOAST } from "./rider-utils";
@@ -20,7 +19,6 @@ export function RiderLogin({
   /** Signed in successfully, but the account has no rider access. */
   notRider?: boolean;
 }) {
-  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -104,7 +102,7 @@ export function RiderLogin({
               autoComplete="username"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="rider@azlandairy.com"
+              placeholder="rider@azlanfastfood.com"
               className={FIELD_CLASS}
             />
           </div>
@@ -142,14 +140,6 @@ export function RiderLogin({
             )}
           </button>
         </form>
-
-        <button
-          type="button"
-          onClick={() => router.push("/")}
-          className="text-sm font-bold text-[var(--r-muted)] cursor-pointer"
-        >
-          ‹ Website par wapis
-        </button>
       </div>
     </div>
   );

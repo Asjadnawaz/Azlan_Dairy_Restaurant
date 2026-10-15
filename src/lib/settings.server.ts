@@ -9,6 +9,7 @@ import {
   type StoreStatusResult,
 } from "@/lib/store-hours";
 import type { Settings } from "@/lib/supabase/database.types";
+import { hasSupabaseEnv, SUPABASE_ANON_KEY, SUPABASE_URL } from "@/lib/supabase/env";
 
 /**
  * Shop settings, read once and cached. **Server-only** — the `.server.ts`
@@ -35,14 +36,17 @@ const SETTINGS_TTL_SECONDS = 60;
 /** Anon key, no cookies — required for the read to be cacheable. */
 function createPublicClient() {
   return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    SUPABASE_URL,
+    SUPABASE_ANON_KEY,
     { auth: { autoRefreshToken: false, persistSession: false } }
   );
 }
 
 const loadSettings = unstable_cache(
   async (): Promise<Settings | null> => {
+    // No .env (fresh clone, CI preview): fall back to the bundled defaults
+    // instead of throwing during prerender.
+    if (!hasSupabaseEnv()) return null;
     const { data, error } = await createPublicClient()
       .from("settings")
       .select("*")

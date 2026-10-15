@@ -1,6 +1,7 @@
 import { cache } from "react";
 import { unstable_cache, revalidateTag } from "next/cache";
 import { createClient } from "@supabase/supabase-js";
+import { hasSupabaseEnv, SUPABASE_ANON_KEY, SUPABASE_URL } from "@/lib/supabase/env";
 
 /**
  * Public reviews, read once and cached. **Server-only** — do not import from a
@@ -54,8 +55,8 @@ export const EMPTY_REVIEWS_SUMMARY: ReviewsSummary = {
 /** Anon key, no cookies — required for the read to be cacheable. */
 function createPublicClient() {
   return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    SUPABASE_URL,
+    SUPABASE_ANON_KEY,
     { auth: { autoRefreshToken: false, persistSession: false } }
   );
 }
@@ -90,6 +91,7 @@ function itemName(items: ReviewRow["items"]): string | null {
 
 const loadReviews = unstable_cache(
   async (): Promise<ReviewsSummary> => {
+    if (!hasSupabaseEnv()) return EMPTY_REVIEWS_SUMMARY;
     const supabase = createPublicClient();
 
     const [featuredResult, ratingsResult] = await Promise.all([

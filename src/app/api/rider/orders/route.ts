@@ -67,8 +67,8 @@ export async function GET() {
       .limit(100);
 
     if (ordersErr) {
-      console.error("Error fetching rider orders:", ordersErr);
-      return NextResponse.json({ error: ordersErr.message }, { status: 500 });
+      console.error("Error fetching rider orders:", ordersErr.message);
+      return NextResponse.json({ error: "Failed to fetch assigned orders" }, { status: 500 });
     }
 
     const orderList = orders || [];

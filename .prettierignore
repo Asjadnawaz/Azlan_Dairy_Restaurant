@@ -1,0 +1,10 @@
+node_modules
+.next
+out
+public
+package-lock.json
+src/data/menu-image-blur.generated.ts
+src/assets
+.env*
+!.env.example
+
