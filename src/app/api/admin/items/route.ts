@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAdminUser } from "@/lib/admin";
-import { MENU_ITEMS } from "@/data/menu-data";
+import { MENU_ITEMS } from "@/data/menu";
 import { revalidateMenu } from "@/lib/menu.server";
 import { getErrorMessage } from "@/lib/utils";
 

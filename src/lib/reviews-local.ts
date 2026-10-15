@@ -3,7 +3,7 @@
  *
  * Kept in `localStorage` rather than the database because guests place most
  * orders and there is no row to hang "already asked" off. Two writers share it —
- * the site-wide watcher (src/components/azlan/review-watcher.tsx) and the rate
+ * the site-wide watcher (src/components/orders/review-watcher.tsx) and the rate
  * card on the tracking page — so it lives here instead of in either of them.
  *
  * Browser-only. Every read is defensive: private mode throws on access, and a
@@ -104,12 +104,16 @@ export function isOrderSnoozed(orderId: string): boolean {
   return (readJson<Record<string, number>>(SNOOZE_KEY, {})[orderId] ?? 0) > Date.now();
 }
 
-/** Orders in `azlan-orders`, as the cart writes them. */
+/** Orders in `azlan-orders`, as the cart writes them (see lib/cart-storage.ts). */
 export type StoredOrder = {
   id?: string;
   orderNumber?: string;
   phone?: string;
   total?: number;
+  subtotal?: number;
+  delivery_fee?: number;
+  customer_name?: string;
+  customer_address?: string;
   status?: string;
   timestamp?: number;
   items?: { id: string; name: string; price: number; quantity: number; image_path?: string | null }[];

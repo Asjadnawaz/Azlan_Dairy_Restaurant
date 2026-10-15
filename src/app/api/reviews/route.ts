@@ -66,58 +66,61 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "item_id is required" }, { status: 400 });
     }
 
-    const admin = createAdminClient();
-    const { data, error } = await admin
-      .from("reviews")
-      .select("id, customer_name, rating, comment, created_at, is_verified")
-      .eq("item_id", itemId)
-      .order("created_at", { ascending: false })
-      .limit(30);
+    try {
+      const admin = createAdminClient();
+      const { data, error } = await admin
+        .from("reviews")
+        .select("id, customer_name, rating, comment, created_at, is_verified")
+        .eq("item_id", itemId)
+        .order("created_at", { ascending: false })
+        .limit(30);
 
-    if (error) {
-      console.error("Failed to read item reviews:", error.message);
-      return NextResponse.json({ error: "Could not load reviews" }, { status: 500 });
+      if (error) {
+        return NextResponse.json({ reviews: [], average: 0, count: 0 });
+      }
+
+      const rows = (data ?? []) as {
+        id: string;
+        customer_name: string | null;
+        rating: number;
+        comment: string | null;
+        created_at: string;
+        is_verified: boolean | null;
+      }[];
+
+      // Customers gave us a full name to get an order delivered, not to have it
+      // published — publish "Ahmed K." instead.
+      const reviews = rows.map((row) => {
+        const parts = (row.customer_name || "").trim().split(/\s+/).filter(Boolean);
+        const name =
+          parts.length === 0
+            ? "Customer"
+            : parts.length === 1
+              ? parts[0]
+              : `${parts[0]} ${parts[parts.length - 1][0].toUpperCase()}.`;
+        return {
+          id: row.id,
+          name,
+          rating: row.rating,
+          comment: row.comment,
+          created_at: row.created_at,
+          is_verified: row.is_verified !== false,
+        };
+      });
+
+      const count = reviews.length;
+      const average =
+        count === 0
+          ? 0
+          : Math.round((reviews.reduce((sum, r) => sum + r.rating, 0) / count) * 10) / 10;
+
+      return NextResponse.json({ reviews, average, count });
+    } catch {
+      return NextResponse.json({ reviews: [], average: 0, count: 0 });
     }
-
-    const rows = (data ?? []) as {
-      id: string;
-      customer_name: string | null;
-      rating: number;
-      comment: string | null;
-      created_at: string;
-      is_verified: boolean | null;
-    }[];
-
-    // Customers gave us a full name to get an order delivered, not to have it
-    // published — publish "Ahmed K." instead.
-    const reviews = rows.map((row) => {
-      const parts = (row.customer_name || "").trim().split(/\s+/).filter(Boolean);
-      const name =
-        parts.length === 0
-          ? "Customer"
-          : parts.length === 1
-            ? parts[0]
-            : `${parts[0]} ${parts[parts.length - 1][0].toUpperCase()}.`;
-      return {
-        id: row.id,
-        name,
-        rating: row.rating,
-        comment: row.comment,
-        created_at: row.created_at,
-        is_verified: row.is_verified !== false,
-      };
-    });
-
-    const count = reviews.length;
-    const average =
-      count === 0
-        ? 0
-        : Math.round((reviews.reduce((sum, r) => sum + r.rating, 0) / count) * 10) / 10;
-
-    return NextResponse.json({ reviews, average, count });
   } catch (err) {
     console.error("Get reviews exception:", err);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json({ reviews: [], average: 0, count: 0 });
   }
 }
 

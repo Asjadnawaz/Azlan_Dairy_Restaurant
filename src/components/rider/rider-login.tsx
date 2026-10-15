@@ -104,7 +104,7 @@ export function RiderLogin({
               autoComplete="username"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="rider@azlandairy.com"
+              placeholder="rider@azlanfastfood.com"
               className={FIELD_CLASS}
             />
           </div>

@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSettings } from "@/lib/settings.server";
-import { OrderTracker } from "@/components/azlan/order-tracker";
+import { OrderTracker } from "@/components/orders/order-tracker";
 import type { Order, OrderItem } from "@/lib/supabase/database.types";
 
 /**

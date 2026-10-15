@@ -1,7 +1,6 @@
 import { createBrowserClient as createSSRBrowserClient } from "@supabase/ssr";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+import { SUPABASE_ANON_KEY, SUPABASE_URL } from "@/lib/supabase/env";
 
 const ONE_MONTH_IN_SECONDS = 60 * 60 * 24 * 30;
 
@@ -11,7 +10,7 @@ const ONE_MONTH_IN_SECONDS = 60 * 60 * 24 * 30;
  * so users remain logged in across tab closures and browser restarts.
  */
 export const createBrowserClient = () =>
-  createSSRBrowserClient(supabaseUrl, supabaseAnonKey, {
+  createSSRBrowserClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     cookieOptions: {
       maxAge: ONE_MONTH_IN_SECONDS,
       path: "/",

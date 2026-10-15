@@ -65,7 +65,7 @@ export default async function AdminDashboardPage() {
       initialStats={statsResult?.stats ?? null}
       initialStatsTruncated={statsResult?.truncated ?? false}
       settings={(settingsData as Settings) ?? null}
-      userEmail={user.email ?? "admin@azlandairy.com"}
+      userEmail={user.email ?? "admin@azlanfastfood.com"}
       signOutButton={<SignOutButton tone="dark" />}
     />
   );

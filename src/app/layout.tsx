@@ -1,11 +1,10 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import { Plus_Jakarta_Sans } from "next/font/google";
-import { ThemeProvider } from "@/components/azlan/theme-provider";
 import { Toaster } from "sonner";
-import { LayoutChrome } from "@/components/azlan/layout-chrome";
+import { LayoutChrome } from "@/components/layout/layout-chrome";
 import { StoreStatusProvider } from "@/hooks/use-store-status";
-import { ReviewWatcher } from "@/components/azlan/review-watcher";
+import { ReviewWatcher } from "@/components/orders/review-watcher";
 import { getSettings, getStoreStatus } from "@/lib/settings.server";
 import { DEFAULT_CLOSE_HOUR, DEFAULT_OPEN_HOUR } from "@/lib/store-hours";
 import "./globals.css";
@@ -23,17 +22,35 @@ const integralCf = localFont({
   display: "swap",
 });
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://azlandairy.pk";
+// Self-hosted subset of Material Symbols (see scripts/build-icon-font.mjs).
+// `display: "block"` + same-origin preload means icons never render as their
+// ligature text ("schedule", "shopping_cart") while the font loads.
+const materialSymbols = localFont({
+  src: "../assets/fonts/material-symbols-subset.woff2",
+  variable: "--font-material-symbols",
+  weight: "100 700",
+  display: "block",
+  adjustFontFallback: false,
+});
+
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://azlanfastfood.com";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: {
-    default: "Azlan Fast Food & BBQ Point — Crispy Burgers, Pizzas & BBQ in Malir, Karachi",
-    template: "%s | Azlan Fast Food & BBQ Point",
+    default: "Azlan Fast Food & BBQ Point — By Azlan Dairy | Malir, Karachi",
+    template: "%s | Azlan Fast Food (Azlan Dairy)",
   },
   description:
-    "Order piping hot Zinger burgers, cheesy pizzas, loaded rolls, and charcoal BBQ online from Azlan Fast Food & BBQ Point in Malir, Karachi. 100% fresh ingredients & fast delivery.",
+    "Official fast food & BBQ branch of Azlan Dairy. Order piping hot Zinger burgers, cheesy pizzas, loaded rolls, and charcoal BBQ online from Azlan Fast Food & BBQ Point in Malir, Karachi. 100% fresh dairy & quality ingredients with fast delivery.",
   keywords: [
+    "Azlan Dairy",
+    "Azlan Dairy Restaurant",
+    "Azlan Dairy Fast Food",
+    "Azlan Dairy Malir",
+    "Azlan Dairy Karachi",
+    "Azlan Dairy BBQ Point",
+    "Azlan Dairy Farm",
     "Azlan Fast Food",
     "Azlan BBQ Point",
     "Fast Food Malir Karachi",
@@ -42,10 +59,12 @@ export const metadata: Metadata = {
     "Online Food Delivery Malir",
     "Best Burger Malir",
     "Pizza Delivery Malir",
-    "Azlan Dairy Restaurant",
+    "Fast Food Khokhrapar",
+    "Best BBQ in Malir Karachi",
+    "Azlan Fast Food Karachi",
   ],
-  authors: [{ name: "Azlan Fast Food & BBQ Point" }],
-  creator: "Azlan Fast Food",
+  authors: [{ name: "Azlan Fast Food & BBQ Point (Azlan Dairy)" }],
+  creator: "Azlan Fast Food (Azlan Dairy)",
   publisher: "Azlan Fast Food & BBQ Point",
   formatDetection: {
     email: false,
@@ -54,29 +73,33 @@ export const metadata: Metadata = {
   },
   alternates: {
     canonical: siteUrl,
+    languages: {
+      "en-PK": siteUrl,
+      en: siteUrl,
+    },
   },
   openGraph: {
-    title: "Azlan Fast Food & BBQ Point — Malir, Karachi",
+    title: "Azlan Fast Food & BBQ Point — By Azlan Dairy | Malir, Karachi",
     description:
-      "Hot, crispy Zinger burgers, cheesy pizzas, loaded rolls & charcoal BBQ delivered fresh in Malir, Karachi.",
+      "Hot, crispy Zinger burgers, cheesy pizzas, loaded rolls & charcoal BBQ by Azlan Dairy delivered fresh in Malir, Karachi.",
     url: siteUrl,
-    siteName: "Azlan Fast Food & BBQ Point",
+    siteName: "Azlan Fast Food & BBQ Point (Azlan Dairy)",
     images: [
       {
         url: `${siteUrl}/images/hero-burger.jpg`,
         width: 1200,
         height: 630,
-        alt: "Azlan Fast Food & BBQ Point Menu",
+        alt: "Azlan Fast Food & BBQ Point (Azlan Dairy) Menu",
       },
     ],
-    locale: "en_US",
+    locale: "en_PK",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Azlan Fast Food & BBQ Point — Malir, Karachi",
+    title: "Azlan Fast Food & BBQ Point — By Azlan Dairy | Malir, Karachi",
     description:
-      "Hot, crispy Zinger burgers, cheesy pizzas, loaded rolls & charcoal BBQ delivered fresh in Malir, Karachi.",
+      "Hot, crispy Zinger burgers, cheesy pizzas, loaded rolls & charcoal BBQ by Azlan Dairy delivered fresh in Malir, Karachi.",
     images: [`${siteUrl}/images/hero-burger.jpg`],
   },
   robots: {
@@ -129,94 +152,146 @@ export default async function RootLayout({
 
   const jsonLd = {
     "@context": "https://schema.org",
-    "@type": "FastFoodRestaurant",
-    name: settings?.store_name || "Azlan Fast Food & BBQ Point",
-    image: `${siteUrl}/images/hero-burger.jpg`,
-    logo: `${siteUrl}/images/logo.png`,
-    url: siteUrl,
-    // Real values from `settings` — this used to publish a placeholder number,
-    // the wrong street and 12:00–02:00 opening hours.
-    telephone: settings?.phone || "+92 302 9359694",
-    priceRange: "$$",
-    servesCuisine: ["Fast Food", "BBQ", "Burgers", "Pizza", "Pakistani"],
-    address: {
-      "@type": "PostalAddress",
-      streetAddress: settings?.address || "Main Khokhrapar no. 2.5",
-      addressLocality: "Malir",
-      addressRegion: "Karachi",
-      postalCode: "75080",
-      addressCountry: "PK",
-    },
-    geo: {
-      "@type": "GeoCoordinates",
-      latitude: 24.8967,
-      longitude: 67.1956,
-    },
-    openingHoursSpecification: [
+    "@graph": [
       {
-        "@type": "OpeningHoursSpecification",
-        dayOfWeek: [
-          "Monday",
-          "Tuesday",
-          "Wednesday",
-          "Thursday",
-          "Friday",
-          "Saturday",
-          "Sunday",
+        "@type": ["FastFoodRestaurant", "Restaurant"],
+        "@id": `${siteUrl}/#restaurant`,
+        name: settings?.store_name || "Azlan Fast Food & BBQ Point",
+        alternateName: [
+          "Azlan Dairy",
+          "Azlan Dairy Restaurant",
+          "Azlan Dairy Fast Food",
+          "Azlan Dairy BBQ Point",
+          "Azlan Fast Food",
+          "Azlan Fast Food & BBQ Point",
         ],
-        opens: toIsoTime(openHour),
-        closes: toIsoTime(closeHour),
+        description:
+          "Official fast food and BBQ branch of Azlan Dairy in Malir, Karachi. Famous for crispy Zinger burgers, loaded pizzas, juicy rolls, and charcoal BBQ made with fresh dairy and quality ingredients.",
+        image: [
+          `${siteUrl}/images/hero-burger.jpg`,
+          `${siteUrl}/images/hero-burger.webp`,
+          `${siteUrl}/images/pizza.webp`,
+        ],
+        logo: `${siteUrl}/images/logo.png`,
+        url: siteUrl,
+        telephone: settings?.phone || "+92 302 9359694",
+        priceRange: "$$",
+        currenciesAccepted: "PKR",
+        paymentAccepted: ["Cash", "Cash on Delivery"],
+        servesCuisine: [
+          "Fast Food",
+          "BBQ",
+          "Burgers",
+          "Pizza",
+          "Pakistani",
+          "Dairy",
+        ],
+        parentOrganization: {
+          "@type": "Organization",
+          name: "Azlan Dairy",
+          alternateName: "Azlan Dairy Farm",
+          url: siteUrl,
+        },
+        address: {
+          "@type": "PostalAddress",
+          streetAddress: settings?.address || "Main Khokhrapar no. 2.5",
+          addressLocality: "Malir",
+          addressRegion: "Karachi",
+          postalCode: "75080",
+          addressCountry: "PK",
+        },
+        geo: {
+          "@type": "GeoCoordinates",
+          latitude: 24.8967,
+          longitude: 67.1956,
+        },
+        sameAs: [
+          "https://www.facebook.com/p/Aazlan-dairy-fast-foods-B-B-Q-point-61580115230642/",
+          "https://www.instagram.com/azlan_dairy_fast_food_/",
+          "https://www.youtube.com/channel/UCBuexULFg1nRAW0x7ZhWCtg",
+          "https://www.tiktok.com/@talha_meo",
+        ],
+        openingHoursSpecification: [
+          {
+            "@type": "OpeningHoursSpecification",
+            dayOfWeek: [
+              "Monday",
+              "Tuesday",
+              "Wednesday",
+              "Thursday",
+              "Friday",
+              "Saturday",
+              "Sunday",
+            ],
+            opens: toIsoTime(openHour),
+            closes: toIsoTime(closeHour),
+          },
+        ],
+        hasMenu: `${siteUrl}/#menu`,
+        potentialAction: {
+          "@type": "OrderAction",
+          target: {
+            "@type": "EntryPoint",
+            urlTemplate: `${siteUrl}/#menu`,
+            inLanguage: "en-PK",
+            actionPlatform: [
+              "http://schema.org/DesktopWebPlatform",
+              "http://schema.org/MobileWebPlatform",
+            ],
+          },
+          deliveryMethod: [
+            "http://purl.org/goodrelations/v1#DeliveryModeOwnFleet",
+          ],
+        },
+      },
+      {
+        "@type": "WebSite",
+        "@id": `${siteUrl}/#website`,
+        url: siteUrl,
+        name: "Azlan Fast Food & BBQ Point | Azlan Dairy",
+        alternateName: ["Azlan Dairy", "Azlan Fast Food"],
+        description:
+          "Online food ordering for Azlan Fast Food & BBQ Point (Azlan Dairy) in Malir, Karachi.",
+        publisher: {
+          "@id": `${siteUrl}/#restaurant`,
+        },
+        inLanguage: "en-PK",
       },
     ],
-    hasMenu: `${siteUrl}/#menu`,
   };
 
   return (
     <html
       lang="en"
-      className={`${plusJakarta.variable} ${integralCf.variable} h-full antialiased`}
+      className={`${plusJakarta.variable} ${integralCf.variable} ${materialSymbols.variable} h-full antialiased`}
       suppressHydrationWarning
     >
       <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
-        {/*
-          Material Symbols is an icon font: until it arrives every icon renders
-          as its ligature text ("search", "call"), so loading it non-blocking
-          would look worse than the extra round trip. next/font cannot host it —
-          Google Fonts does not publish it through the API next/font uses — so
-          the stylesheet link stays, with a preconnect to start the fetch sooner.
-        */}
-        {/* eslint-disable-next-line @next/next/no-page-custom-font */}
-        <link
-          rel="stylesheet"
-          href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap"
-        />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
+        {/* Safeguard: hide ligature text until the subset icon font is ready */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `if("fonts" in document && !document.fonts.check("24px 'Material Symbols Outlined'")){document.documentElement.classList.add("icons-loading");document.fonts.ready.then(function(){document.documentElement.classList.remove("icons-loading")});setTimeout(function(){document.documentElement.classList.remove("icons-loading")},3000);}`,
+          }}
+        />
       </head>
       <body className="min-h-full flex flex-col">
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="light"
-          enableSystem={false}
-        >
-          <StoreStatusProvider seed={storeSeed}>
-            <LayoutChrome deliveryFee={settings?.delivery_fee ?? 0} />
-            <main className="flex-1">{children}</main>
-            <ReviewWatcher />
-          </StoreStatusProvider>
-          <Toaster
-            position="bottom-right"
-            closeButton
-            toastOptions={{
-              duration: 3000,
-              className: "azlan-brand-toast",
-            }}
-          />
-        </ThemeProvider>
+        <StoreStatusProvider seed={storeSeed}>
+          <LayoutChrome deliveryFee={settings?.delivery_fee ?? 0} />
+          <main className="flex-1">{children}</main>
+          <ReviewWatcher />
+        </StoreStatusProvider>
+        <Toaster
+          position="bottom-right"
+          closeButton
+          toastOptions={{
+            duration: 3000,
+            className: "azlan-brand-toast",
+          }}
+        />
       </body>
     </html>
   );

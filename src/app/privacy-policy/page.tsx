@@ -1,9 +1,12 @@
 import { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy | Azlan Fast Food",
+  title: "Privacy Policy | Azlan Fast Food (Azlan Dairy)",
   description:
-    "Privacy Policy and data protection details for Azlan Fast Food and BBQ point.",
+    "Privacy Policy and customer data protection details for Azlan Fast Food & BBQ Point, part of Azlan Dairy in Malir, Karachi.",
+  alternates: {
+    canonical: "/privacy-policy",
+  },
 };
 
 export default function PrivacyPolicyPage() {

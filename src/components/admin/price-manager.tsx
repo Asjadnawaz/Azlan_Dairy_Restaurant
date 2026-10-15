@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import Image from "next/image";
+import { MenuImage } from "@/components/menu/menu-image";
 import type { Item } from "@/lib/supabase/database.types";
 import { toast } from "sonner";
 
@@ -207,14 +207,8 @@ export function PriceManager() {
                 <div>
                   <div className="flex gap-3 items-start mb-3">
                     <div className="relative w-16 h-16 rounded-xl overflow-hidden shrink-0 bg-slate-100 border border-slate-200">
-                      <Image
-                        src={
-                          item.image_path
-                            ? item.image_path
-                                .replace("/images/Orignal_Images/", "/images/Webp_Orignal_images/")
-                                .replace(/\.(jpeg|jpg|png)$/i, ".webp")
-                            : "/images/burger.jpg"
-                        }
+                      <MenuImage
+                        src={item.image_path}
                         alt={item.name}
                         fill
                         sizes="64px"
