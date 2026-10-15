@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidateReviews } from "@/lib/reviews.server";
 import { revalidateMenu } from "@/lib/menu.server";
 import { sanitizePhone } from "@/lib/sanitize";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
 
 /**
  * Reviews.
@@ -138,6 +139,16 @@ type ReviewBody = {
 
 export async function POST(req: NextRequest) {
   try {
+    // Rate Limiting: max 15 review submissions per 10 minutes per IP
+    const clientIp = getClientIp(req);
+    const rateLimit = checkRateLimit(`reviews:${clientIp}`, 15, 600_000);
+    if (!rateLimit.success) {
+      return NextResponse.json(
+        { error: "Too many review submissions. Please wait a few minutes before trying again." },
+        { status: 429, headers: { "Retry-After": String(rateLimit.retryAfterSeconds) } }
+      );
+    }
+
     const body = (await req.json()) as ReviewBody;
 
     const orderId = typeof body.order_id === "string" ? body.order_id.trim() : "";

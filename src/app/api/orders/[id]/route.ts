@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { cookies } from "next/headers";
 import { isAdminUser } from "@/lib/admin";
 import { syncUserProfile } from "@/lib/auth-role";
 import { generateDeliveryReceiptEmail, generateOrderCancellationEmail, sendEmail } from "@/lib/email";
@@ -168,26 +167,26 @@ export async function PATCH(
       );
     }
 
-    // Authorization check: Admin OR Rider
-    const cookieStore = await cookies();
-    const adminCookie = cookieStore.get("admin_auth")?.value;
-
+    // Authorization check: Must be authenticated Admin OR Rider (never rely on client-set cookies)
     const supabase = await createServerClient();
     const {
       data: { user },
     } = await supabase.auth.getUser();
 
-    let isAuthorized = adminCookie === "true";
-    if (!isAuthorized && user) {
-      const dbRole = await syncUserProfile(user);
-      if (dbRole === "admin" || dbRole === "rider" || isAdminUser(user)) {
-        isAuthorized = true;
-      }
+    if (!user) {
+      return NextResponse.json(
+        { error: "Unauthorized: Authentication required" },
+        { status: 401 }
+      );
     }
 
-    if (!isAuthorized) {
+    const dbRole = await syncUserProfile(user);
+    const isAdmin = dbRole === "admin" || isAdminUser(user);
+    const isRider = dbRole === "rider";
+
+    if (!isAdmin && !isRider) {
       return NextResponse.json(
-        { error: "Unauthorized: Admin or Rider privileges required" },
+        { error: "Forbidden: Admin or Rider privileges required" },
         { status: 403 }
       );
     }
@@ -237,6 +236,31 @@ export async function PATCH(
       }
     }
 
+    // Prevent IDOR: riders can only update orders assigned to them or unassigned orders
+    if (!isAdmin && isRider) {
+      const { data: currentOrder } = await admin
+        .from("orders")
+        .select("rider_id, status")
+        .eq("id", id)
+        .maybeSingle();
+
+      if (!currentOrder) {
+        return NextResponse.json({ error: "Order not found" }, { status: 404 });
+      }
+
+      const isAssignedToSelf =
+        !currentOrder.rider_id ||
+        currentOrder.rider_id === currentRiderId ||
+        currentOrder.rider_id === currentRiderUserId;
+
+      if (!isAssignedToSelf) {
+        return NextResponse.json(
+          { error: "Forbidden: You are not assigned to this delivery" },
+          { status: 403 }
+        );
+      }
+    }
+
     if (rider_id !== undefined) {
       updateData.rider_id = rider_id;
     } else if (currentRiderId && (status === "picked_up" || status === "out_for_delivery" || status === "delivering")) {
@@ -257,7 +281,7 @@ export async function PATCH(
     if (error || !order) {
       console.error("Failed updating order:", error);
       return NextResponse.json(
-        { error: "Failed to update order", detail: error?.message },
+        { error: "Failed to update order" },
         { status: 500 }
       );
     }

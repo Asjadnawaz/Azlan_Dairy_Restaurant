@@ -32,8 +32,9 @@ export async function GET() {
       .limit(50);
 
     if (ordersError) {
+      console.error("Failed to fetch orders:", ordersError.message);
       return NextResponse.json(
-        { error: "Failed to fetch orders", detail: ordersError.message },
+        { error: "Failed to fetch orders" },
         { status: 500 }
       );
     }

@@ -5,6 +5,9 @@ import { generateOrderConfirmationEmail, sendEmail } from "@/lib/email";
 import { sanitizeText, sanitizePhone, isValidPakistanPhone } from "@/lib/sanitize";
 import { getStoreOpenStatus, formatCountdown } from "@/lib/store-hours";
 import { computeTotals } from "@/lib/cart-pricing";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+import { MENU_ITEMS } from "@/data/menu";
+import { calculateDistance, calculateDeliveryFee, MAX_DELIVERY_RADIUS_KM } from "@/lib/delivery";
 
 interface OrderLineItem {
   id: string;
@@ -140,6 +143,16 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    // 0. Rate Limiting: max 10 orders per 10 minutes per IP
+    const clientIp = getClientIp(req);
+    const rateLimit = checkRateLimit(`orders:${clientIp}`, 10, 600_000);
+    if (!rateLimit.success) {
+      return NextResponse.json(
+        { error: "Too many order requests. Please wait a few minutes before trying again." },
+        { status: 429, headers: { "Retry-After": String(rateLimit.retryAfterSeconds) } }
+      );
+    }
+
     const body = (await req.json()) as CreateOrderBody;
 
     // Server-side sanitization and validation
@@ -166,11 +179,27 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
-    if (!body.items || body.items.length === 0) {
+    if (!Array.isArray(body.items) || body.items.length === 0 || body.items.length > 50) {
       return NextResponse.json(
-        { error: "Cart is empty" },
+        { error: "Cart must contain between 1 and 50 items" },
         { status: 400 }
       );
+    }
+
+    // Strict item structure and quantity validation
+    for (const item of body.items) {
+      if (!item || typeof item.name !== "string" || !item.name.trim()) {
+        return NextResponse.json({ error: "Invalid item in cart" }, { status: 400 });
+      }
+      if (!Number.isInteger(item.quantity) || item.quantity < 1 || item.quantity > 50) {
+        return NextResponse.json(
+          { error: `Invalid quantity for ${item.name}. Must be an integer between 1 and 50.` },
+          { status: 400 }
+        );
+      }
+      if (typeof item.price !== "number" || item.price < 0 || !Number.isFinite(item.price)) {
+        return NextResponse.json({ error: `Invalid price for ${item.name}` }, { status: 400 });
+      }
     }
 
     // Get authenticated user (for email + user_id linking)
@@ -201,9 +230,31 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: errorMsg }, { status: 403 });
     }
 
-    // Re-derive the money from the line items. The browser sends `subtotal`,
-    // `total` and a coupon code, but a request is just text — trusting the
-    // posted total meant anyone could pay Rs. 1 for a family bucket.
+    // Calculate server-verified delivery fee
+    const isPickup = /\[PICKUP\]/i.test(body.customer_note ?? "");
+    let verifiedDeliveryFee = 0;
+    if (!isPickup) {
+      const defaultFee = settings?.delivery_fee ?? 60;
+      if (body.delivery_coordinates?.lat && body.delivery_coordinates?.lng) {
+        const dist = calculateDistance(
+          24.9080912,
+          67.2124054,
+          body.delivery_coordinates.lat,
+          body.delivery_coordinates.lng
+        );
+        if (dist > MAX_DELIVERY_RADIUS_KM) {
+          return NextResponse.json(
+            { error: `Delivery address is outside our maximum radius of ${MAX_DELIVERY_RADIUS_KM} km` },
+            { status: 400 }
+          );
+        }
+        verifiedDeliveryFee = calculateDeliveryFee(dist);
+      } else {
+        verifiedDeliveryFee = Math.max(defaultFee, Number(body.delivery_fee) || defaultFee);
+      }
+    }
+
+    // Re-derive the money from the line items with verified delivery fee
     const totals = computeTotals({
       items: body.items.map((item) => ({
         id: item.id,
@@ -211,50 +262,52 @@ export async function POST(req: NextRequest) {
         price: item.price,
         quantity: item.quantity,
       })),
-      deliveryFee: body.delivery_fee,
+      deliveryFee: verifiedDeliveryFee,
       couponCode: body.coupon_code ?? null,
-      isPickup: /\[PICKUP\]/i.test(body.customer_note ?? ""),
+      isPickup,
     });
 
-    // The prices themselves still come from the request, so confirm them
-    // against the menu before charging anyone.
+    // Authoritative Price Verification:
+    // Build lookup map from fallback MENU_ITEMS, then overlay live DB rows.
+    const authoritativePrices = new Map<string, number>();
+    for (const m of MENU_ITEMS) {
+      authoritativePrices.set(m.id, m.price);
+      if (m.slug) authoritativePrices.set(m.slug, m.price);
+    }
+
     const menuIds = body.items
       .map((item) => item.id)
-      .filter((id) => uuidRegex.test(id));
-
+      .filter((id) => typeof id === "string" && id.trim().length > 0);
     const validMenuIds = new Set<string>();
 
-    if (menuIds.length > 0) {
+    const uuidIds = menuIds.filter((id) => uuidRegex.test(id));
+    if (uuidIds.length > 0) {
       const { data: menuRows } = await admin
         .from("items")
         .select("id, price")
-        .in("id", menuIds);
-
-      const livePrices = new Map(
-        ((menuRows ?? []) as { id: string; price: number }[]).map((row) => [
-          row.id,
-          row.price,
-        ])
-      );
+        .in("id", uuidIds);
 
       for (const row of menuRows ?? []) {
         validMenuIds.add(row.id);
+        authoritativePrices.set(row.id, row.price);
+      }
+    }
+
+    // Every item MUST match its authoritative menu price
+    for (const item of body.items) {
+      let expectedPrice = authoritativePrices.get(item.id);
+      if (expectedPrice === undefined) {
+        const byName = MENU_ITEMS.find((m) => m.name.toLowerCase() === item.name.toLowerCase());
+        if (byName) expectedPrice = byName.price;
       }
 
-      const mismatched = body.items.find(
-        (item) =>
-          livePrices.has(item.id) &&
-          Math.round(livePrices.get(item.id)!) !== Math.round(item.price)
-      );
-
-      if (mismatched) {
-        return NextResponse.json(
-          {
-            error:
-              "Some prices changed while you were ordering. Please refresh your basket and try again.",
-          },
-          { status: 409 }
-        );
+      if (expectedPrice !== undefined) {
+        if (Math.round(expectedPrice) !== Math.round(item.price)) {
+          return NextResponse.json(
+            { error: `Price for "${item.name}" has changed. Please refresh your basket.` },
+            { status: 409 }
+          );
+        }
       }
     }
 
@@ -310,7 +363,7 @@ export async function POST(req: NextRequest) {
     if (!order) {
       console.error("Failed to insert order:", orderError);
       return NextResponse.json(
-        { error: "Failed to place order. Please try again.", detail: orderError?.message },
+        { error: "Failed to place order. Please try again." },
         { status: 500 }
       );
     }
@@ -335,7 +388,7 @@ export async function POST(req: NextRequest) {
       // Clean up orphaned order row to avoid empty orders in admin dashboard
       await admin.from("orders").delete().eq("id", order.id);
       return NextResponse.json(
-        { error: "Failed to record order items. Please try again.", detail: itemsError.message },
+        { error: "Failed to record order items. Please try again." },
         { status: 500 }
       );
     }

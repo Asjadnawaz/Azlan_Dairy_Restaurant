@@ -157,7 +157,6 @@ export async function POST(req: NextRequest) {
         return NextResponse.json(
           {
             error: "Failed to update settings in database",
-            detail: fallback.error.message,
           },
           { status: 500 }
         );
