@@ -1,10 +1,11 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import { Toaster } from "sonner";
 import { LayoutChrome } from "@/components/layout/layout-chrome";
 import { StoreStatusProvider } from "@/hooks/use-store-status";
 import { ReviewWatcher } from "@/components/orders/review-watcher";
+import { PwaRegister } from "@/components/pwa/pwa-register";
 import { getSettings, getStoreStatus } from "@/lib/settings.server";
 import { DEFAULT_CLOSE_HOUR, DEFAULT_OPEN_HOUR } from "@/lib/store-hours";
 import "./globals.css";
@@ -34,6 +35,12 @@ const materialSymbols = localFont({
 });
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://azlanfastfood.com";
+
+export const viewport: Viewport = {
+  themeColor: "#00230c",
+  width: "device-width",
+  initialScale: 1,
+};
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
@@ -113,9 +120,21 @@ export const metadata: Metadata = {
       "max-snippet": -1,
     },
   },
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Azlan Fast Food",
+  },
   icons: {
-    icon: [{ url: "/images/logo.png", type: "image/png" }],
-    apple: [{ url: "/images/logo.png", type: "image/png" }],
+    icon: [
+      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
+      { url: "/images/logo.png", type: "image/png" },
+    ],
+    apple: [
+      { url: "/icons/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+    ],
   },
 };
 
@@ -283,6 +302,7 @@ export default async function RootLayout({
           <LayoutChrome deliveryFee={settings?.delivery_fee ?? 0} />
           <main className="flex-1">{children}</main>
           <ReviewWatcher />
+          <PwaRegister />
         </StoreStatusProvider>
         <Toaster
           position="bottom-right"

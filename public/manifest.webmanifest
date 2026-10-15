@@ -1,0 +1,56 @@
+{
+  "id": "azlan-customer-app",
+  "name": "Azlan Fast Food & BBQ Point",
+  "short_name": "Azlan Food",
+  "description": "Order hot Zinger burgers, cheesy pizzas, loaded rolls, and charcoal BBQ online from Azlan Fast Food & BBQ Point (Azlan Dairy) in Malir, Karachi.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#00230c",
+  "theme_color": "#00230c",
+  "categories": ["food", "shopping", "lifestyle"],
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Our Menu",
+      "short_name": "Menu",
+      "description": "Browse our full fast food and BBQ menu",
+      "url": "/#menu",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Shopping Cart",
+      "short_name": "Cart",
+      "description": "View cart and checkout",
+      "url": "/cart",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Track Order",
+      "short_name": "Track",
+      "description": "Check real-time order and delivery status",
+      "url": "/orders",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}
