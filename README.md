@@ -92,6 +92,18 @@ docs/             design tokens, menu source, privacy policy copy
 | `npm run build:icons`  | regenerate the Material Symbols subset font        |
 | `npm run build:images` | regenerate right-sized menu images + blur previews |
 
+## Documentation Suite
+
+For comprehensive guides and technical references, consult the dedicated documentation:
+
+| Document | Purpose |
+| :--- | :--- |
+| **[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)** | Technical topology, system architecture, database ERD, state management, and performance pipeline. |
+| **[`docs/API_REFERENCE.md`](docs/API_REFERENCE.md)** | Full REST endpoint specifications, request payloads, response schemas, and authentication guards. |
+| **[`docs/OPERATIONS_GUIDE.md`](docs/OPERATIONS_GUIDE.md)** | Environment variables, Supabase migrations, data seeding, thermal printer setup, and Vercel deployment. |
+| **[`docs/DESIGN.md`](docs/DESIGN.md)** | Brand tokens, color palette, typography guidelines, and visual identity. |
+| **[`docs/privacy-policy.md`](docs/privacy-policy.md)** | Full corporate privacy policy, data protection, and customer rights disclosure. |
+
 ## Generated assets
 
 Two build scripts keep binary assets out of hand and the payload small:
@@ -106,6 +118,7 @@ The full-resolution masters live in `assets-source/` (outside `public/`) so they
 - The homepage, cart, orders and privacy pages are prerendered (ISR, 60 s) with tag-based revalidation on every menu/settings/review write.
 - All server reads are cookie-free and cached; realtime channels keep open tabs live.
 - Menu images are pre-sized and immutable-cached; the first card row loads eagerly, the rest lazily with a blur-up placeholder.
+- Multi-variant menu items (such as Pizzas with Small, Regular, Large sizes) are automatically consolidated into single cards with interactive size selection modals.
 - Heavy client-only surfaces (Leaflet maps, admin charts, modals) load via `next/dynamic`.
 
 ## Licensing note

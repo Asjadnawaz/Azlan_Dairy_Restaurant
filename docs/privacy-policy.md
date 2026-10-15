@@ -1,184 +1,131 @@
-# Privacy Policy
+# Privacy & Data Protection Policy
 
-**Last updated:** August 10, 2026  
-**Effective date:** August 10, 2026
-
-This Privacy Policy describes how **Azlan Fast Food and B B Q point** ("we", "us", or "our") collects, uses, stores, and protects your personal information when you use our website and ordering services.
-
----
-
-## 1. Information We Collect
-
-We collect the following categories of personal information:
-
-### 1.1 Account Information
-- **Email address** (for account creation, login, and order confirmations)
-- **Password** (stored securely via Supabase Auth; never stored in plain text)
-- **Full name** (optional, collected during sign-up)
-
-### 1.2 Order Information
-- **Customer name**
-- **Phone number**
-- **Delivery address**
-- **Special instructions / order notes**
-- **Delivery coordinates** (latitude and longitude, collected via map selection)
-- **Order details** (items, quantities, prices, subtotal, delivery fee, total)
-- **Payment method** (currently Cash on Delivery or Bank Transfer)
-
-### 1.3 Review Information
-- **Customer name**
-- **Phone number**
-- **Review rating and comment**
-
-### 1.4 Device and Usage Data
-- **Browser cookies** (for session management and authentication)
-- **Local storage data** (cart contents and recent order history stored locally in your browser)
+**Last Updated:** October 15, 2026  
+**Effective Date:** October 15, 2026  
+**Version:** 2.5 (Revised)  
+**Entity:** Azlan Fast Food & BBQ Point (a division of Azlan Dairy)  
+**Location:** Main Khokhrapar No. 2.5, Malir, Karachi, Sindh, Pakistan  
+**Website:** https://azlanfastfood.com  
 
 ---
 
-## 2. How We Use Your Information
+## 1. Overview & Corporate Scope
 
-We use your personal information for the following purposes:
-
-- **Order processing:** To fulfill and deliver your food orders
-- **Communication:** To send order confirmations, status updates, and customer support responses
-- **Account management:** To authenticate users and maintain order history
-- **Service improvement:** To understand how customers use our website and improve our services
-- **Legal compliance:** To comply with applicable laws and regulations
+This Privacy Policy describes how **Azlan Fast Food & BBQ Point** ("we", "us", or "our"), an official food division of **Azlan Dairy**, collects, uses, stores, and safeguards personal information when customers access our online ordering website at `azlanfastfood.com`, place pickup or delivery orders, track deliveries, register user accounts, or submit customer reviews.
 
 ---
 
-## 3. Data Storage and Security
+## 2. Information We Collect
 
-### 3.1 Database
-Your personal information is stored securely using **Supabase** (PostgreSQL) with Row Level Security (RLS) enabled. Access to your data is restricted based on authentication status and user roles.
+### 2.1 Customer Identity & Contact Data
+- **Full Name:** To address receipts, kitchen slips, and verify physical delivery handovers.
+- **Phone Number:** Essential for rider coordination, delivery address clarification, and order status updates.
+- **Email Address:** Used for automated order confirmation invoices, receipts, and optional password recovery.
+- **Account Credentials:** Encrypted authentication credentials managed via Supabase Auth (passwords are securely hashed with Bcrypt and never stored in plain text).
 
-### 3.2 Authentication
-We use **Supabase Auth** for secure authentication. Passwords are hashed and never stored in plain text. We also support Google OAuth for sign-in.
+### 2.2 Delivery & Geolocation Information
+- **Physical Address & Landmark Notes:** Street address, building name, floor number, gate instructions.
+- **Delivery Map Coordinates:** Exact latitude and longitude selected on our interactive map.
 
-### 3.3 Local Storage
-Your browser may store:
-- Cart contents (while you are browsing)
-- Last 5 order numbers (for quick reordering and tracking)
+### 2.3 Order & Transaction Details
+- **Order Line Items:** Food choices, pizza sizes, quantities, and preparation customizations.
+- **Financial Breakdown:** Subtotal, distance-based delivery fee, discounts/coupons applied, and grand total.
+- **Payment Method:** Cash on Delivery (COD) or electronic transfer verification. We do not store sensitive bank PINs or payment card CVVs.
 
-This data remains on your device and is not transmitted to our servers unless you place an order.
-
-### 3.4 Session Management
-We use secure HTTP-only cookies for admin and rider session management. These cookies are essential for the operation of protected areas of our website.
-
----
-
-## 4. Third-Party Services
-
-We use the following third-party services that may collect or process your data:
-
-### 4.1 Supabase
-- **Purpose:** Database hosting, authentication, and realtime features
-- **Data shared:** Account credentials, order data, profile information
-- **Privacy Policy:** https://supabase.com/privacy
-
-### 4.2 Resend
-- **Purpose:** Sending order confirmation emails
-- **Data shared:** Email address, name, order number, order details, delivery address, phone number
-- **Privacy Policy:** https://resend.com/legal/privacy
-
-### 4.3 Google OAuth
-- **Purpose:** Social sign-in authentication
-- **Data shared:** Email address, name, profile picture (if authorized)
-- **Privacy Policy:** https://policies.google.com/privacy
-
-### 4.4 OpenStreetMap / Leaflet
-- **Purpose:** Displaying delivery maps and calculating routes
-- **Data shared:** Delivery coordinates (latitude and longitude)
-- **Privacy Policy:** https://wiki.openstreetmap.org/wiki/Privacy_Policy
-
-### 4.5 Social Media Platforms
-Our website contains links to our social media profiles:
-- Facebook: https://www.facebook.com/p/Aazlan-dairy-fast-foods-B-B-Q-point-61580115230642/
-- Instagram: https://www.instagram.com/azlan_dairy_fast_food_/
-- YouTube: https://www.youtube.com/channel/UCBuexULFg1nRAW0x7ZhWCtg
-- TikTok: https://www.tiktok.com/@talha_meo
-
-These platforms have their own privacy policies, and we encourage you to review them.
+### 2.4 Verified Customer Reviews
+- **Ratings & Reviews:** 1 to 5 star scores and comments regarding food taste and delivery speed.
+- **Public Attribution:** Customer names are automatically masked (e.g., "Ahmed K.") on public reviews to protect personal privacy.
 
 ---
 
-## 5. Data Sharing and Disclosure
+## 3. Delivery GPS & Geolocation Policy
 
-We do **not** sell, trade, or rent your personal information to third parties. We may share your information only in the following circumstances:
-
-- **Service providers:** With trusted third-party service providers (Supabase, Resend) who assist in operating our website and services
-- **Legal requirements:** When required by law or to protect our rights, property, or safety
-- **Business transfers:** In connection with a merger, acquisition, or sale of assets
-
----
-
-## 6. Cookies
-
-We use cookies for the following purposes:
-
-| Cookie Name | Purpose | Duration |
-|-------------|---------|----------|
-| `admin_auth` | Admin session authentication | 24 hours |
-| `rider_auth` | Rider session authentication | 24 hours |
-| Supabase auth cookies | User session management | Session-based |
-
-You can control cookie preferences through your browser settings. Disabling certain cookies may affect the functionality of our website.
+Our platform utilizes an interactive Leaflet and OpenStreetMap interface:
+- **No Background Tracking:** We do not track user location continuously or when the browser tab is idle or closed.
+- **Delivery Distance Calculation:** When a pin is selected, our server computes the exact road distance from our kitchen (Khokhrapar No. 2.5, Malir) to calculate a transparent, fair delivery fee (PKR 60 base for 2 km + PKR 25 per additional km).
+- **Rider Navigation:** Once an order is marked `out_for_delivery`, coordinates are passed strictly to the assigned delivery rider to navigate to your doorstep.
 
 ---
 
-## 7. Your Rights
+## 4. How We Use Your Information
 
-You have the following rights regarding your personal information:
-
-- **Access:** Request a copy of the personal data we hold about you
-- **Correction:** Request correction of inaccurate or incomplete data
-- **Deletion:** Request deletion of your account and associated data
-- **Opt-out:** Unsubscribe from marketing communications (we do not send marketing emails except order confirmations)
-- **Data portability:** Request your data in a portable format
-
-To exercise these rights, please contact us using the contact information provided below.
+We process personal data strictly for genuine operational requirements:
+1. **Kitchen Fulfillment:** Dispatching order tickets to kitchen display screens and thermal order printers.
+2. **Delivery Dispatch:** Supplying riders with the necessary contact and address details to complete handovers.
+3. **Invoicing & Receipts:** Generating printable customer invoices and dispatching confirmation emails via Resend.
+4. **Account Management:** Maintaining order history and cart state across sessions.
+5. **Quality Assurance:** Monitoring food preparation times and verified customer feedback.
+6. **Platform Security:** Preventing fraudulent orders, spam, and unauthorized account access.
 
 ---
 
-## 8. Data Retention
+## 5. Data Security & Storage Architecture
 
-- **Account data:** Retained until you delete your account
-- **Order records:** Retained for business and legal purposes (typically 3-7 years)
-- **Review data:** Retained indefinitely unless you request removal
-- **Local storage:** Cleared when you clear your browser data
-
----
-
-## 9. Children's Privacy
-
-Our services are not directed to individuals under the age of 13. We do not knowingly collect personal information from children. If you believe we have collected information from a child, please contact us immediately.
+- **PostgreSQL Kernel Security (RLS):** Database records in Supabase are governed by Row-Level Security policies. Customers can only read and mutate their own data.
+- **TLS 1.3 Encryption:** All browser-to-server traffic is enforced via HTTPS with Strict-Transport-Security (HSTS).
+- **Role-Based Isolation:** Administrative features, pricing controls, and rider shift manifests require cryptographically verified server-side tokens (`admin_auth`, `rider_auth`). Delivery riders only view orders actively assigned to them.
 
 ---
 
-## 10. Changes to This Privacy Policy
+## 6. Third-Party Service Providers
 
-We may update this Privacy Policy from time to time. We will notify you of any changes by posting the new Privacy Policy on this page and updating the "Last updated" date. We encourage you to review this Privacy Policy periodically.
+| Provider | Purpose | Data Handled | Privacy Disclosures |
+| :--- | :--- | :--- | :--- |
+| **Supabase Inc.** | Cloud database, authentication, realtime subscriptions | User profiles, order lines, review text | https://supabase.com/privacy |
+| **Resend Inc.** | Transactional order confirmation emails | Customer email, order receipt copy | https://resend.com/legal/privacy |
+| **OpenStreetMap** | Interactive delivery map tiles | Delivery pin latitude & longitude | https://wiki.openstreetmap.org/wiki/Privacy_Policy |
+| **Google OAuth** | Optional one-tap social sign-in | Verified email, name, avatar | https://policies.google.com/privacy |
 
----
-
-## 11. Contact Us
-
-If you have any questions, concerns, or requests regarding this Privacy Policy or your personal data, please contact us:
-
-**Azlan Fast Food and B B Q point**  
-📍 Main Khokhrapar no. 2.5, Malir, Karachi, Pakistan  
-📞 [Contact via WhatsApp or phone - see website]  
-📧 [Contact email - see website settings]
+We do not sell, rent, or trade your personal data to any third-party advertising brokers or data aggregators.
 
 ---
 
-## 12. Governing Law
+## 7. Cookies & Client Storage
 
-This Privacy Policy is governed by and construed in accordance with the laws of Pakistan. Any disputes relating to this policy shall be subject to the exclusive jurisdiction of the courts of Karachi, Pakistan.
+We use strictly functional cookies and local storage items:
+
+| Identifier | Mechanism | Purpose | Lifespan |
+| :--- | :--- | :--- | :--- |
+| `azlan-cart-storage` | Local Storage | Persists selected food items & quantities | Cleared upon checkout or user action |
+| `azlan_recent_orders`| Local Storage | Allows guest users to track recent orders without logging in | 30 days |
+| `admin_auth` | HTTP-Only Cookie | Encrypted administrative session cookie | 24 hours |
+| `rider_auth` | HTTP-Only Cookie | Encrypted rider dispatch session cookie | 24 hours |
 
 ---
 
-## Summary
+## 8. Customer Privacy Rights
 
-We take your privacy seriously. We only collect the information necessary to process your orders and provide our services. We do not sell your data. We use industry-standard security measures to protect your information. If you have any questions, please reach out to us.
+Under applicable privacy standards, you have the right to:
+- **Access & Review:** Request a summary of all orders and records tied to your phone number or email.
+- **Rectification:** Correct outdated delivery notes, names, or addresses.
+- **Erasure:** Request permanent deletion of your customer account and associated personal data.
+- **Opt-Out:** We do not send unsolicited marketing SMS. Transactional notifications are strictly related to active food orders.
+
+To exercise any of these rights, contact our Privacy Desk via WhatsApp or phone.
+
+---
+
+## 9. Data Retention Schedule
+
+- **Active Orders:** Realtime status preserved until fulfillment.
+- **Financial Invoices:** Retained for 3 to 7 years in compliance with Sindh Revenue Board (SRB) and local tax standards.
+- **User Accounts:** Maintained until voluntary account termination.
+- **Local Browser Cache:** Managed locally on your device; can be cleared at any time in browser settings.
+
+---
+
+## 10. Children's Privacy
+
+Our services are directed to adults and authorized family members. We do not knowingly collect information from children under 13 without parental consent.
+
+---
+
+## 11. Official Contact & Legal Jurisdiction
+
+**Azlan Fast Food & BBQ Point (Azlan Dairy)**  
+📍 **Address:** Main Khokhrapar No. 2.5, Malir, Karachi, Sindh, Pakistan  
+🕒 **Operating Hours:** Daily 7:00 PM – 3:00 AM (PST)  
+🌐 **Website:** https://azlanfastfood.com  
+
+### Governing Law
+This Privacy Policy is governed by the laws of the Islamic Republic of Pakistan and the Province of Sindh. Any disputes shall be subject to the exclusive jurisdiction of the civil and consumer courts of Karachi, Pakistan.
