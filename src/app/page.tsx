@@ -26,13 +26,6 @@ export default async function Home() {
 
   return (
     <>
-      <link
-        rel="preload"
-        as="image"
-        href="/images/hero-burger.webp"
-        type="image/webp"
-        fetchPriority="high"
-      />
       <Hero settings={settings} />
       <TrustSection />
       <MenuSection items={items} />
